@@ -86,7 +86,10 @@ extern "C" int osSetTimer(OSTimer* t, OSTime countdown, OSTime interval, OSMesgQ
     }
     if (!sWorkerStarted) {
         sWorkerStarted = true;
-        sWorker = std::thread(Worker);
+        sWorker = std::thread([] {
+            OS_PinCurrentThread(1, "timer");
+            Worker();
+        });
     }
     Armed armed;
     armed.deadline = std::chrono::steady_clock::now() + std::chrono::nanoseconds(countdown * 64 / 3);

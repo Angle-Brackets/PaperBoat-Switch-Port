@@ -106,7 +106,10 @@ extern "C" void osCreateViManager(OSPri pri) {
     if (sTickerRun.exchange(true)) {
         return;
     }
-    sTicker = std::thread(TickerMain);
+    sTicker = std::thread([] {
+        OS_PinCurrentThread(1, "vi ticker");
+        TickerMain();
+    });
 }
 
 extern "C" void OS_StopViTicker(void) {

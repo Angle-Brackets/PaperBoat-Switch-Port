@@ -14,6 +14,10 @@ void OS_SetThreadPri(void* thread, int32_t pri);
 
 // osStartThread only launches entries enabled here.
 void OS_EnableThreadEntry(void* entry);
+// Switch: the CPU core an entry's thread runs on (default 1). Elsewhere a no-op.
+void OS_SetThreadEntryCore(void* entry, int core);
+// Switch: moves the calling thread to one core. Off core 0, which the render (main) thread owns.
+void OS_PinCurrentThread(int core, const char* name);
 
 void OS_RequestThreadExit(void);
 int OS_ThreadShouldExit(void);

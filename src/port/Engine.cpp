@@ -1096,6 +1096,8 @@ void GameEngine::AudioInit() {
     }
 
     OS_EnableThreadEntry((void*) nuAuMgr);
+    // Its own core: synthesis never waits behind the game's frame.
+    OS_SetThreadEntryCore((void*) nuAuMgr, 2);
 
     create_audio_system();
 

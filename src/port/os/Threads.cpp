@@ -7,9 +7,16 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
 #include <thread>
 
 #include <SDL2/SDL_thread.h>
+#ifdef __SWITCH__
+#include <spdlog/spdlog.h>
+// libnx's switch.h clashes with libultra's u64/s64 typedefs (OS.h); just the one syscall.
+extern "C" uint32_t svcSetThreadCoreMask(uint32_t handle, int32_t preferred_core, uint32_t affinity_mask);
+constexpr uint32_t kCurThreadHandle = 0xFFFF8000; // CUR_THREAD_HANDLE
+#endif
 
 namespace {
 
@@ -25,6 +32,9 @@ struct OsThreadState {
 std::mutex sTableMutex;
 std::map<void*, OsThreadState> sThreads;
 std::set<void*> sEnabledEntries;
+std::map<void*, int> sEntryCores;
+// Core 0 is the render (main) thread's; the game and its helpers share core 1 unless moved.
+constexpr int kDefaultThreadCore = 1;
 
 std::atomic<bool> sExitRequested { false };
 
@@ -49,6 +59,25 @@ bool ThreadEnabled(void* entry) {
 extern "C" void OS_EnableThreadEntry(void* entry) {
     std::lock_guard<std::mutex> lock(sTableMutex);
     sEnabledEntries.insert(entry);
+}
+
+extern "C" void OS_SetThreadEntryCore(void* entry, int core) {
+    std::lock_guard<std::mutex> lock(sTableMutex);
+    sEntryCores[entry] = core;
+}
+
+extern "C" void OS_PinCurrentThread(int core, const char* name) {
+#ifdef __SWITCH__
+    const uint32_t rc = svcSetThreadCoreMask(kCurThreadHandle, core, 1u << core);
+    if (rc != 0) {
+        SPDLOG_WARN("[switch] {} thread: core {} pin failed, rc={:#x}", name, core, rc);
+    } else {
+        SPDLOG_INFO("[switch] {} thread on core {}", name, core);
+    }
+#else
+    (void) core;
+    (void) name;
+#endif
 }
 
 extern "C" void OS_RequestThreadExit(void) {
@@ -113,8 +142,13 @@ extern "C" void OS_StartThread(void* thread) {
 
     void (*entry)(void*) = st.entry;
     void* arg = st.arg;
+    const auto coreIt = sEntryCores.find((void*) entry);
+    const int core = coreIt != sEntryCores.end() ? coreIt->second : kDefaultThreadCore;
+    const int32_t osId = st.id;
     auto tid = std::make_shared<std::atomic<unsigned long>>(0);
-    st.worker = std::thread([entry, arg, tid]() {
+    st.worker = std::thread([entry, arg, tid, core, osId]() {
+        const std::string name = "os " + std::to_string(osId);
+        OS_PinCurrentThread(core, name.c_str());
         tid->store((unsigned long) SDL_ThreadID(), std::memory_order_release);
         entry(arg);
         {
