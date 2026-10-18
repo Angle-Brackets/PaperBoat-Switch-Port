@@ -1380,6 +1380,7 @@ void update_encounters_pre_battle(void) {
             bgm_push_battle_song();
             HasPreBattleSongPushed = true;
 
+            CALL_EVENT(OnBattlePrepare, currentEncounter->curEncounter->battle);
             currentEncounter->battleStartCountdown = 10;
             gEncounterSubState = ENCOUNTER_SUBSTATE_PRE_BATTLE_LOAD;
             // fallthrough

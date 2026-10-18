@@ -1,5 +1,6 @@
 #include <fast/Fast3dWindow.h>
 #include <fast/interpreter.h>
+#include <fast/ShaderPrewarm.h>
 #include <libultraship.h>
 
 #include <chrono>
@@ -155,6 +156,10 @@ extern "C"
     Graphics_Start();
     SWITCH_MEM_CHECKPOINT("Graphics_Start");
 
+    // Idle-time shader prewarm: when the last GFX task ran, and whether a shader was compiled since.
+    auto lastTask = std::chrono::steady_clock::now();
+    bool compiledSinceTask = false;
+
     while (wnd->IsRunning()) {
         ThreadWatchdog_Beat(WATCHDOG_MAIN_LOOP);
 #ifdef __SWITCH__
@@ -180,13 +185,29 @@ extern "C"
         const bool ranTask = ServiceRcp();
         SWITCH_PHASE_END(1);
 #undef SWITCH_PHASE_END
-        if (!ranTask) {
+        if (ranTask) {
+            lastTask = std::chrono::steady_clock::now();
+            compiledSinceTask = false;
+        } else {
             if (ThreadWatchdog_IsStalled(WATCHDOG_GAME_TICK)) {
                 GameEngine::Instance->RenderGuiFrame();
                 SDL_Delay(16);
                 continue;
             }
-            SDL_Delay(1);
+            // No task for longer than a 30 Hz frame: the game isn't drawing (map/battle load),
+            // so queued shaders compile back to back. While drawing, at most one per frame.
+            const bool drawing = std::chrono::steady_clock::now() - lastTask < std::chrono::milliseconds(45);
+            std::pair<uint64_t, uint64_t> shader;
+            if ((!drawing || !compiledSinceTask) && Fast::ShaderPrewarm::TakeOne(shader, drawing)) {
+                if (auto interpreter = wnd->GetInterpreterWeak().lock()) {
+                    const std::vector<std::pair<uint64_t, uint64_t>> one { shader };
+                    size_t cursor = 0;
+                    interpreter->PrewarmSome(one, cursor, 0.0);
+                }
+                compiledSinceTask = drawing;
+            } else {
+                SDL_Delay(1);
+            }
         }
 #ifdef __EMSCRIPTEN__
         // A tab can close without warning, so sync periodically, not just on exit.

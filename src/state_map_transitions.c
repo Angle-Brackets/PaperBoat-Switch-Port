@@ -1,6 +1,7 @@
 #include "common.h"
 #include "nu/nusys.h"
 #include "game_modes.h"
+#include "port/Engine.h"
 
 BSS s16 gMapTransitionAlpha;
 BSS s16 gMapTransitionFadeRate;
@@ -117,6 +118,7 @@ enum ChangeMapStates {
 };
 
 void state_init_change_map(void) {
+    CALL_EVENT(OnMapChangeStart, gAreas[gGameStatusPtr->areaID].maps[gGameStatusPtr->mapID].id);
     gMapTransitionAlpha = 0;
     gMapTransitionFadeRate = 20;
     gMapTransitionState = CHANGE_MAP_INIT;

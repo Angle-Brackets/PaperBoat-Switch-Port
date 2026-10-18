@@ -94,9 +94,25 @@ DEFINE_EVENT(OnActorDefenseCheck,
 );
 
 // World
+// Start of a map change, before the fade-out: the destination map.
+DEFINE_EVENT(OnMapChangeStart,
+    const char* mapName;
+);
+
 DEFINE_EVENT(OnMapLoad,
     const char* mapName;
 );
+
+// Battles: when the pre-battle fade begins, once the battle is loaded, and when it ends.
+DEFINE_EVENT(OnBattlePrepare,
+    int32_t battleID;
+);
+
+DEFINE_EVENT(OnBattleStart,
+    int32_t battleID;
+);
+
+DEFINE_EVENT(OnBattleEnd);
 
 DEFINE_EVENT(OnPlayerSpeedUpdate,
     float* walkSpeed;

@@ -96,6 +96,7 @@ void state_step_battle(void) {
         initialize_battle();
         btl_save_world_cameras();
         load_battle_section();
+        CALL_EVENT(OnBattleStart, gCurrentBattleID);
         SavedWorldAnimFlags = gPlayerStatusPtr->animFlags;
         gPlayerStatusPtr->animFlags &= ~PA_FLAG_PULSE_STONE_VISIBLE;
         SavedWorldFreezeMode = get_time_freeze_mode();
@@ -124,6 +125,7 @@ void state_drawUI_battle(void) {
 }
 
 void state_init_end_battle(void) {
+    CALL_EVENT(OnBattleEnd);
     gOverrideFlags |= GLOBAL_OVERRIDES_DISABLE_DRAW_FRAME;
     nuContRmbForceStop();
     BattleTransitionDelay = 5;

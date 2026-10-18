@@ -87,7 +87,11 @@ void PortEnhancements_Register() {
     REGISTER_EVENT(OnEnemyAttackDamage);
     REGISTER_EVENT(OnPartnerAttackDamage);
     REGISTER_EVENT(OnActorDefenseCheck);
+    REGISTER_EVENT(OnMapChangeStart);
     REGISTER_EVENT(OnMapLoad);
+    REGISTER_EVENT(OnBattlePrepare);
+    REGISTER_EVENT(OnBattleStart);
+    REGISTER_EVENT(OnBattleEnd);
     REGISTER_EVENT(OnPlayerSpeedUpdate);
     REGISTER_EVENT(OnMapReady);
     REGISTER_EVENT(OnHiddenBlockAlphaChange);
