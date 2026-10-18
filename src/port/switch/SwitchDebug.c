@@ -8,7 +8,9 @@
 
 #include "SwitchDebug.h"
 
+#include <dirent.h>
 #include <malloc.h>
+#include <sys/stat.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -54,6 +56,7 @@ extern volatile uint64_t gLusArchiveOpenMicros;
 
 // spdlog sink (port/Game.cpp): reaches both nxlink and logs/Paperboat.log.
 void SwitchDebug_Log(const char* msg);
+void SwitchDebug_LogWarn(const char* msg);
 
 static void MonitorLog(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 static void MonitorLog(const char* fmt, ...) {
@@ -83,9 +86,38 @@ void SwitchDebug_MemCheckpoint(const char* label) {
     static size_t sLastInUse = 0;
     struct mallinfo mi = mallinfo();
     const size_t inUse = mi.uordblks;
-    MonitorLog("checkpoint %-22s malloc in use %6.1f MiB (%+7.1f MiB)", label, inUse / 1048576.0,
-               ((double) inUse - (double) sLastInUse) / 1048576.0);
+    char buf[160];
+    snprintf(buf, sizeof(buf), "checkpoint %-26s malloc in use %6.1f MiB (%+7.1f MiB)", label, inUse / 1048576.0,
+             ((double) inUse - (double) sLastInUse) / 1048576.0);
+    SwitchDebug_LogWarn(buf);
     sLastInUse = inUse;
+}
+
+// Size of LUS's on-disk shader cache (<app dir>/shadercache, cwd is the app dir).
+static void PrintShaderCacheStats(void) {
+    DIR* dir = opendir("shadercache");
+    if (dir == NULL) {
+        MonitorLog("shadercache: none yet");
+        return;
+    }
+    unsigned files = 0;
+    unsigned long long bytes = 0, largest = 0;
+    struct dirent* ent;
+    char path[300];
+    while ((ent = readdir(dir)) != NULL) {
+        snprintf(path, sizeof(path), "shadercache/%s", ent->d_name);
+        struct stat st;
+        if (stat(path, &st) == 0 && S_ISREG(st.st_mode)) {
+            files++;
+            bytes += st.st_size;
+            if ((unsigned long long) st.st_size > largest) {
+                largest = st.st_size;
+            }
+        }
+    }
+    closedir(dir);
+    MonitorLog("shadercache: %u files, %llu KiB total, avg %llu KiB, largest %llu KiB", files, bytes >> 10,
+               files ? (bytes / files) >> 10 : 0, largest >> 10);
 }
 
 // Called once per main-loop iteration. The main thread renders, so a long
@@ -101,6 +133,7 @@ void SwitchDebug_LoopTick(void) {
     if (sLastTick == 0) {
         sLastTick = sLastStatsTick = now;
         PrintMemoryStats("start");
+        PrintShaderCacheStats();
         return;
     }
 

@@ -20,6 +20,10 @@
 extern "C" void SwitchDebug_Log(const char* msg) {
     SPDLOG_INFO("[switch] {}", msg);
 }
+// Startup runs at the release log level (warn) until FinishInit lowers it to info.
+extern "C" void SwitchDebug_LogWarn(const char* msg) {
+    SPDLOG_WARN("[switch] {}", msg);
+}
 #endif
 #ifdef __ANDROID__
 // Redefines main() to SDL_main(), which SDLActivity calls into. The game data
