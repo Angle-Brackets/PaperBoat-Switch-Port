@@ -209,6 +209,12 @@ GameEngine::GameEngine() {
     this->context->InitLogging();
     this->context->InitConfiguration();
     this->context->InitConsoleVariables();
+#ifdef __SWITCH__
+    // No keyboard for F1/Esc: default to controller nav so Minus (GamepadBack) opens the menu.
+    if (CVarGet(CVAR_IMGUI_CONTROLLER_NAV) == nullptr) {
+        CVarSetInteger(CVAR_IMGUI_CONTROLLER_NAV, 1);
+    }
+#endif
 
     this->context->InitControlDeck(std::make_shared<LUS::ControlDeck>());
     this->context->InitResourceManager(
