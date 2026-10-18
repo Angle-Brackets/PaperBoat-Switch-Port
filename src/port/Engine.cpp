@@ -1100,6 +1100,43 @@ void GameEngine::AudioExit() {
     }
 }
 
+// For port_renderSettled: presented frames, and when the last slow one finished.
+static std::atomic<uint32_t> sFramesPresented { 0 };
+static std::atomic<int64_t> sLastSlowFrameMs { 0 };
+
+static int64_t SteadyMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+static void NoteFramePresented(std::chrono::steady_clock::duration took) {
+    if (took > std::chrono::milliseconds(40)) {
+        sLastSlowFrameMs = SteadyMs();
+    }
+    sFramesPresented++;
+}
+
+extern "C" int port_renderSettled(void) {
+    constexpr uint32_t kMinFrames = 3;     // the first frames of a map load its textures
+    constexpr int64_t kQuietMs = 100;      // no slow frame for this long
+    constexpr int64_t kMaxWaitMs = 2000;
+    static int64_t sWaitStartMs = 0, sLastCallMs = 0;
+    static uint32_t sWaitStartFrames = 0;
+
+    const int64_t now = SteadyMs();
+    if (now - sLastCallMs > 200) { // not called last frame: a new fade-in
+        sWaitStartMs = now;
+        sWaitStartFrames = sFramesPresented;
+    }
+    sLastCallMs = now;
+    if (now - sWaitStartMs > kMaxWaitMs) {
+        return 1;
+    }
+    return sFramesPresented - sWaitStartFrames >= kMinFrames && nuGfxTaskSpool == 0 &&
+           now - sLastSlowFrameMs > kQuietMs;
+}
+
 void GameEngine::RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements) {
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow());
 
@@ -1121,7 +1158,9 @@ void GameEngine::RunCommands(Gfx* Commands, const std::vector<std::unordered_map
             interpreter->mInterpolationIndex++;
             continue;
         }
+        const auto frameStart = std::chrono::steady_clock::now();
         wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements[i], {});
+        NoteFramePresented(std::chrono::steady_clock::now() - frameStart);
         OS_ViNotifyPresent();
         interpreter->mInterpolationIndex++;
     }

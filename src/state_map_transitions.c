@@ -92,7 +92,12 @@ void state_step_enter_world(void) {
             update_effects();
             update_cameras();
 
-            if (update_enter_map_screen_overlay(&gMapTransitionAlpha) != 0) {
+            // PORT: keep the overlay fully dark until the renderer keeps up; the first frames of a
+            // new map are slow (asset loads), and the game would otherwise fade in unseen.
+            if (gMapTransitionAlpha == 255 && !port_renderSettled()) {
+                update_enter_map_screen_overlay(&gMapTransitionAlpha);
+                gMapTransitionAlpha = 255;
+            } else if (update_enter_map_screen_overlay(&gMapTransitionAlpha) != 0) {
                 if (gGameStatusPtr->demoState == DEMO_STATE_NONE) {
                     enable_player_input();
                 }
@@ -191,7 +196,12 @@ void state_step_change_map(void) {
             update_effects();
             update_cameras();
 
-            if (update_enter_map_screen_overlay(&gMapTransitionAlpha) != 0) {
+            // PORT: keep the overlay fully dark until the renderer keeps up; the first frames of a
+            // new map are slow (asset loads), and the game would otherwise fade in unseen.
+            if (gMapTransitionAlpha == 255 && !port_renderSettled()) {
+                update_enter_map_screen_overlay(&gMapTransitionAlpha);
+                gMapTransitionAlpha = 255;
+            } else if (update_enter_map_screen_overlay(&gMapTransitionAlpha) != 0) {
                 if (gGameStatusPtr->demoState == DEMO_STATE_NONE) {
                     enable_player_input();
                 }

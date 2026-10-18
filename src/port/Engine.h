@@ -154,6 +154,10 @@ void port_runOnRenderThread(void (*fn)(void*), void* arg);
 // Nonzero while the area being entered still has shaders queued to compile. Map loads hold the
 // screen black on it so the fade-in plays after the compiles, not during them. Capped in time.
 int port_shaderPrewarmBusy(void);
+// Fade-in gate: nonzero once the renderer is keeping up with the game after a map load (a few frames
+// presented, none slow, nothing queued), so the fade isn't spent on frames that never reach the screen.
+// Game thread; the first call after a pause starts a new wait. Capped in time.
+int port_renderSettled(void);
 
 #ifdef __cplusplus
 }
