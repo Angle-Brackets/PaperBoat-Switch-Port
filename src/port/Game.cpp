@@ -15,8 +15,8 @@
 #include <SDL2/SDL.h>
 #include "port/web/WebUtils.h"
 #endif
+#include "port/switch/SwitchDebug.h"
 #ifdef __SWITCH__
-extern "C" void SwitchDebug_LoopTick(void); // port/switch/SwitchDebug.c
 extern "C" void SwitchDebug_Log(const char* msg) {
     SPDLOG_INFO("[switch] {}", msg);
 }
@@ -142,9 +142,12 @@ extern "C"
 
     // Initialize game systems
     init_game_globals();
+    SWITCH_MEM_CHECKPOINT("init_game_globals");
     load_engine_data();
+    SWITCH_MEM_CHECKPOINT("load_engine_data");
 
     Graphics_Start();
+    SWITCH_MEM_CHECKPOINT("Graphics_Start");
 
     while (wnd->IsRunning()) {
         ThreadWatchdog_Beat(WATCHDOG_MAIN_LOOP);

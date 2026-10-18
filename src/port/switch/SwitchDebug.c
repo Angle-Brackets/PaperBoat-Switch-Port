@@ -6,6 +6,8 @@
 
 #include <switch.h>
 
+#include "SwitchDebug.h"
+
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -75,6 +77,15 @@ static void PrintMemoryStats(const char* tag) {
     MonitorLog("%s io: %u archive loads (%lu KiB, %lu ms), %u zip opens (%lu ms)", tag,
            gLusArchiveLoadCount, gLusArchiveLoadBytes >> 10, gLusArchiveLoadMicros / 1000, gLusArchiveOpenCount,
            gLusArchiveOpenMicros / 1000);
+}
+
+void SwitchDebug_MemCheckpoint(const char* label) {
+    static size_t sLastInUse = 0;
+    struct mallinfo mi = mallinfo();
+    const size_t inUse = mi.uordblks;
+    MonitorLog("checkpoint %-22s malloc in use %6.1f MiB (%+7.1f MiB)", label, inUse / 1048576.0,
+               ((double) inUse - (double) sLastInUse) / 1048576.0);
+    sLastInUse = inUse;
 }
 
 // Called once per main-loop iteration. The main thread renders, so a long

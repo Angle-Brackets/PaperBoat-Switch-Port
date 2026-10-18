@@ -1,4 +1,5 @@
 #include "Engine.h"
+#include "port/switch/SwitchDebug.h"
 
 #include "ShipInit.hpp"
 #include "extractor/GameExtractor.h"
@@ -207,6 +208,7 @@ GameEngine::GameEngine() {
     gShipContext = this->context;
 
     this->context->InitLogging();
+    SWITCH_MEM_CHECKPOINT("logging");
     this->context->InitConfiguration();
     this->context->InitConsoleVariables();
 #ifdef __SWITCH__
@@ -217,9 +219,11 @@ GameEngine::GameEngine() {
 #endif
 
     this->context->InitControlDeck(std::make_shared<LUS::ControlDeck>());
+    SWITCH_MEM_CHECKPOINT("config+cvars+controldeck");
     this->context->InitResourceManager(
         portArchiveExists ? std::vector<std::string> { assets_path } : std::vector<std::string> {}, {}, 3
     );
+    SWITCH_MEM_CHECKPOINT("resource manager");
     this->context->InitConsole();
     this->context->InitCrashHandler();
     this->context->InitEventSystem();
@@ -236,6 +240,7 @@ GameEngine::GameEngine() {
             return name.substr(0, name.find_last_of('/') + 1);
         });
     }
+    SWITCH_MEM_CHECKPOINT("window+gl+imgui");
     this->context->InitFileDropMgr();
 
     PaperboatGui::SetupMenu();
@@ -277,6 +282,7 @@ void GameEngine::FinishInit() {
         archiveManager->AddArchive(hd_path);
     }
     UpdateModFiles(true);
+    SWITCH_MEM_CHECKPOINT("rom archives+mods");
 
 #ifdef _DEBUG
     spdlog::set_level(spdlog::level::trace);
@@ -294,7 +300,9 @@ void GameEngine::FinishInit() {
             interpreter->SetResolvedResourceCacheEnabled(true);
         }
     }
+    SWITCH_MEM_CHECKPOINT("audio");
     TextureCache_Configure();
+    SWITCH_MEM_CHECKPOINT("texture cache");
 
     auto loader = Ship::Context::GetRawInstance()->GetResourceManager()->GetResourceLoader();
     loader->RegisterResourceFactory(
