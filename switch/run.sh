@@ -4,6 +4,7 @@
 #
 #   switch/run.sh [switch-ip]      (default 192.168.86.191; env SWITCH_IP also works)
 #   NOBUILD=1 switch/run.sh        skip the build
+#   WAIT=1 switch/run.sh           wait (up to 30 min) until NetLoader is listening (Y in hbmenu)
 #
 # Output is also saved to build-switch/last-run.log.
 set -euo pipefail
@@ -33,7 +34,26 @@ symbolize() {
     done
 }
 
+send() {
+    stdbuf -oL -eL "$NXLINK" -a "$IP" -r 3 -p paperboat/paperboat.nro -s "$BUILD/paperboat.nro" 2>&1 \
+        | symbolize | tee "$BUILD/last-run.log"
+}
+
 echo ">> sending to $IP (saved as sdmc:/switch/paperboat/paperboat.nro)"
-# -p is relative to sdmc:/switch/; overwrites the copy in the game folder instead of leaving a second one.
-stdbuf -oL -eL "$NXLINK" -a "$IP" -r 3 -p paperboat/paperboat.nro -s "$BUILD/paperboat.nro" 2>&1 \
-    | symbolize | tee "$BUILD/last-run.log"
+if [[ -n "${WAIT:-}" ]]; then
+    # Retry until NetLoader answers (Y in hbmenu); a failure after the connection was made ends it.
+    deadline=$((SECONDS + 1800))
+    while true; do
+        send || true
+        if ! grep -qE "^Connection to .* failed|No response from Switch" "$BUILD/last-run.log"; then
+            break
+        fi
+        if ((SECONDS > deadline)); then
+            echo ">> gave up waiting for NetLoader"
+            exit 1
+        fi
+        sleep 3
+    done
+else
+    send
+fi
