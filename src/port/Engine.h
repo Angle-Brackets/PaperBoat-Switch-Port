@@ -151,6 +151,9 @@ void gfx_texture_cache_clear(void);
 
 void port_nuGfxOnSubmit(void* task);
 void port_runOnRenderThread(void (*fn)(void*), void* arg);
+// Nonzero while the area being entered still has shaders queued to compile. Map loads hold the
+// screen black on it so the fade-in plays after the compiles, not during them. Capped in time.
+int port_shaderPrewarmBusy(void);
 
 #ifdef __cplusplus
 }

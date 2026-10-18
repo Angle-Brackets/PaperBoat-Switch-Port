@@ -80,7 +80,8 @@ void state_step_enter_world(void) {
                 gMapTransitionStateTime--;
                 break;
             }
-            if (!does_script_exist(gGameStatusPtr->mainScriptID)) {
+            // PORT: also wait (screen still black) for the area's shaders to finish compiling.
+            if (!does_script_exist(gGameStatusPtr->mainScriptID) && !port_shaderPrewarmBusy()) {
                 gOverrideFlags &= ~GLOBAL_OVERRIDES_DISABLE_DRAW_FRAME;
                 gMapTransitionState++;
             }
@@ -178,7 +179,8 @@ void state_step_change_map(void) {
 
             if (gMapTransitionStateTime != 0) {
                 gMapTransitionStateTime--;
-            } else if (!does_script_exist(gGameStatusPtr->mainScriptID)) {
+            } else if (!does_script_exist(gGameStatusPtr->mainScriptID) && !port_shaderPrewarmBusy()) {
+                // PORT: also waits (screen still black) for the area's shaders to finish compiling.
                 gOverrideFlags &= ~GLOBAL_OVERRIDES_DISABLE_DRAW_FRAME;
                 gMapTransitionState++;
             }

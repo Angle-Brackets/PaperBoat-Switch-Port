@@ -1,12 +1,14 @@
 // Feeds LUS's ShaderPrewarm the current area, so each area's shaders compile during the fade
 // into it rather than mid-gameplay. See fast/ShaderPrewarm.h.
 
+#include <chrono>
 #include <cstdio>
 #include <string>
 
 #include <fast/ShaderPrewarm.h>
 #include <libultraship/libultraship.h>
 
+#include "port/Engine.h"
 #include "port/hooks/Events.h"
 #include "port/ShipInit.hpp"
 
@@ -64,6 +66,23 @@ static void RegisterShaderPrewarmHooks_Init() {
             Fast::ShaderPrewarm::EnterArea(sWorldArea);
         }
     });
+}
+
+extern "C" int port_shaderPrewarmBusy(void) {
+    // A cap so a stuck queue (or a list far bigger than expected) can't hold a load forever.
+    constexpr auto kMaxHold = std::chrono::seconds(8);
+    static bool sHolding = false;
+    static std::chrono::steady_clock::time_point sHoldStart;
+    if (!Fast::ShaderPrewarm::Busy()) {
+        sHolding = false;
+        return 0;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!sHolding) {
+        sHolding = true;
+        sHoldStart = now;
+    }
+    return now - sHoldStart < kMaxHold;
 }
 
 static RegisterShipInitFunc initFunc(RegisterShaderPrewarmHooks_Init);
