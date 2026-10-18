@@ -70,12 +70,28 @@ extern uint64_t gLusGpuMicros;
 extern uint64_t gLusGpuGameMicros;
 extern uint64_t gLusRenderCpuMicros;
 extern uint32_t gLusSlowPresents;
+// LUS render-cost attribution: Interpreter::Run (Fast3dWindow.cpp), backend draws and batch breaks
+// (interpreter.cpp), per-draw uniform and vertex upload time (gfx_opengl.cpp). Running totals.
+extern uint64_t gLusRunMicros;
+extern uint64_t gLusDrawMicros;
+extern uint64_t gLusUniformMicros;
+extern uint64_t gLusVboMicros;
+extern uint32_t gLusDraws;
+extern uint32_t gLusTris;
+extern uint32_t gLusOps;
+extern uint32_t gLusTexMiss;
+extern uint32_t gLusTexSame;
+extern uint32_t gLusPalUploads;
+extern uint32_t gLusPrgSwitch;
+extern uint32_t gLusFlushWhy[8]; // tex, cc, prg, unif, mtx, light, pal, other
 
 static void MonitorLog(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 
 static void PrintFrameStats(const char* tag) {
     static uint32_t sFrames, sDropped, sPresents, sSlow;
     static uint64_t sGpu, sGpuGame, sCpu;
+    static uint64_t sRun, sDraw, sUnif, sVbo;
+    static uint32_t sDraws, sTris, sOps, sTexImports, sTexMiss, sTexSame, sPal, sPrg, sWhy[8];
     const uint32_t frames = gLusGpuFrames - sFrames, presents = gLusPresentCount - sPresents;
     if (frames && presents) {
         const double gpu = (gLusGpuMicros - sGpu) / 1000.0 / frames;
@@ -84,7 +100,37 @@ static void PrintFrameStats(const char* tag) {
                    "cpu render avg %.2f ms | %u presents, %u slow",
                    tag, gpu, game, gpu - game, frames, gLusGpuDropped - sDropped,
                    (gLusRenderCpuMicros - sCpu) / 1000.0 / presents, presents, gLusSlowPresents - sSlow);
+        // Per present: with frame interpolation the game list is rendered once per present, not per tick.
+        // "binds" counts every texture import call (cache hits included); "same" are hits on the
+        // texture already bound in that slot.
+        const double p = presents;
+        double why[8];
+        for (int i = 0; i < 8; i++) {
+            why[i] = (gLusFlushWhy[i] - sWhy[i]) / p;
+        }
+        MonitorLog("%s draw: run %.2f ms (gl %.2f: unif %.2f vbo %.2f) | %.0f draws %.0f tris %.0f ops | "
+                   "tex %.1f binds %.1f miss %.1f same | pal %.1f prg %.1f | why tex %.1f cc %.1f prg %.1f "
+                   "unif %.1f mtx %.1f light %.1f pal %.1f other %.1f",
+                   tag, (gLusRunMicros - sRun) / 1000.0 / p, (gLusDrawMicros - sDraw) / 1000.0 / p,
+                   (gLusUniformMicros - sUnif) / 1000.0 / p, (gLusVboMicros - sVbo) / 1000.0 / p,
+                   (gLusDraws - sDraws) / p, (gLusTris - sTris) / p, (gLusOps - sOps) / p,
+                   (gLusTexImportCount - sTexImports) / p, (gLusTexMiss - sTexMiss) / p,
+                   (gLusTexSame - sTexSame) / p, (gLusPalUploads - sPal) / p, (gLusPrgSwitch - sPrg) / p, why[0],
+                   why[1], why[2], why[3], why[4], why[5], why[6], why[7]);
     }
+    sRun = gLusRunMicros;
+    sDraw = gLusDrawMicros;
+    sUnif = gLusUniformMicros;
+    sVbo = gLusVboMicros;
+    sDraws = gLusDraws;
+    sTris = gLusTris;
+    sOps = gLusOps;
+    sTexImports = gLusTexImportCount;
+    sTexMiss = gLusTexMiss;
+    sTexSame = gLusTexSame;
+    sPal = gLusPalUploads;
+    sPrg = gLusPrgSwitch;
+    memcpy(sWhy, gLusFlushWhy, sizeof(sWhy));
     sFrames = gLusGpuFrames;
     sDropped = gLusGpuDropped;
     sPresents = gLusPresentCount;
