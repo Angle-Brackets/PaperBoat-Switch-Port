@@ -9,6 +9,7 @@
 #include "port/Engine.h"
 #include "assets/logos.h"
 #include "embedded/poweredbylus.h"
+#include "embedded/portedby.h"
 
 void appendGfx_intro_logos(void);
 
@@ -291,6 +292,22 @@ void appendGfx_intro_logos(void) {
                                     (POWERED_BY_LUS_Y + i * POWERED_BY_LUS_TILE_ROWS) * 4,
                                     (POWERED_BY_LUS_X + POWERED_BY_LUS_WIDTH) * 4,
                                     (POWERED_BY_LUS_Y + (i + 1) * POWERED_BY_LUS_TILE_ROWS) * 4,
+                                    G_TX_RENDERTILE, 0, 0, 1024, 1024);
+                gDPPipeSync(gMainGfxPos++);
+            }
+
+            // "ported by", same layout as the libultraship logo
+            for (i = 0; i < PORTED_BY_HEIGHT / POWERED_BY_LUS_TILE_ROWS; i++) {
+                gDPLoadTextureTile(gMainGfxPos++,
+                                   gPortedByLogo + i * (PORTED_BY_WIDTH * POWERED_BY_LUS_TILE_ROWS * 2),
+                                   G_IM_FMT_RGBA, G_IM_SIZ_16b, PORTED_BY_WIDTH, PORTED_BY_HEIGHT,
+                                   0, 0, PORTED_BY_WIDTH - 1, POWERED_BY_LUS_TILE_ROWS - 1, 0,
+                                   G_TX_WRAP, G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+                gSPTextureRectangle(gMainGfxPos++,
+                                    PORTED_BY_X * 4,
+                                    (PORTED_BY_Y + i * POWERED_BY_LUS_TILE_ROWS) * 4,
+                                    (PORTED_BY_X + PORTED_BY_WIDTH) * 4,
+                                    (PORTED_BY_Y + (i + 1) * POWERED_BY_LUS_TILE_ROWS) * 4,
                                     G_TX_RENDERTILE, 0, 0, 1024, 1024);
                 gDPPipeSync(gMainGfxPos++);
             }
