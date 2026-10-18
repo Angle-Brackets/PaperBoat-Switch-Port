@@ -63,6 +63,37 @@ extern uint64_t gLusSwapMaxMicros;
 
 uint64_t gSwitchLoopPhaseMicros[2];
 
+// LUS: GPU frame time (gfx_opengl.cpp) and CPU render time (Fast3dWindow.cpp), running totals.
+extern uint32_t gLusGpuFrames;
+extern uint32_t gLusGpuDropped;
+extern uint64_t gLusGpuMicros;
+extern uint64_t gLusGpuGameMicros;
+extern uint64_t gLusRenderCpuMicros;
+extern uint32_t gLusSlowPresents;
+
+static void MonitorLog(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+
+static void PrintFrameStats(const char* tag) {
+    static uint32_t sFrames, sDropped, sPresents, sSlow;
+    static uint64_t sGpu, sGpuGame, sCpu;
+    const uint32_t frames = gLusGpuFrames - sFrames, presents = gLusPresentCount - sPresents;
+    if (frames && presents) {
+        const double gpu = (gLusGpuMicros - sGpu) / 1000.0 / frames;
+        const double game = (gLusGpuGameMicros - sGpuGame) / 1000.0 / frames;
+        MonitorLog("%s frames: gpu avg %.2f ms (game %.2f, composite %.2f) over %u (+%u unmeasured) | "
+                   "cpu render avg %.2f ms | %u presents, %u slow",
+                   tag, gpu, game, gpu - game, frames, gLusGpuDropped - sDropped,
+                   (gLusRenderCpuMicros - sCpu) / 1000.0 / presents, presents, gLusSlowPresents - sSlow);
+    }
+    sFrames = gLusGpuFrames;
+    sDropped = gLusGpuDropped;
+    sPresents = gLusPresentCount;
+    sSlow = gLusSlowPresents;
+    sGpu = gLusGpuMicros;
+    sGpuGame = gLusGpuGameMicros;
+    sCpu = gLusRenderCpuMicros;
+}
+
 #define HITCH_THRESHOLD_NS (40ULL * 1000000ULL) // a 60 fps frame is 16.7 ms
 #define STATS_INTERVAL_NS (10ULL * 1000000000ULL)
 
@@ -177,6 +208,7 @@ void SwitchDebug_LoopTick(void) {
     if (armTicksToNs(now - sLastStatsTick) > STATS_INTERVAL_NS) {
         sLastStatsTick = now;
         PrintMemoryStats("periodic", false);
+        PrintFrameStats("periodic");
     }
     // Taken after the report so its own logging isn't measured as the next iteration's hitch.
     sLastTick = armGetSystemTick();

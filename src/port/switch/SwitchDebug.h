@@ -3,10 +3,15 @@
 // Switch-only debug hooks (port/switch/SwitchDebug.c). The macros compile away elsewhere.
 
 #ifdef __SWITCH__
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 void SwitchDebug_LoopTick(void);
+// Graphics benchmark (SwitchGfxBench.cpp): Start from the menu, Tick once per main-loop iteration.
+void SwitchGfxBench_Start(void);
+void SwitchGfxBench_Tick(void);
 // Logs malloc usage and the delta since the previous checkpoint, to attribute startup memory.
 void SwitchDebug_MemCheckpoint(const char* label);
 // Main-loop time per phase, accumulated by Game.cpp and reported with each hitch:

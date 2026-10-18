@@ -165,6 +165,7 @@ extern "C"
         ThreadWatchdog_Beat(WATCHDOG_MAIN_LOOP);
 #ifdef __SWITCH__
         SwitchDebug_LoopTick();
+        SwitchGfxBench_Tick();
 #endif
 #ifdef __SWITCH__
         // Phase times for the hitch monitor: [0] StartFrame+input+render service, [1] ServiceRcp.

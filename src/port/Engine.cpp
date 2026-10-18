@@ -220,9 +220,29 @@ GameEngine::GameEngine() {
     this->context->InitConfiguration();
     this->context->InitConsoleVariables();
 #ifdef __SWITCH__
-    // No keyboard for F1/Esc: default to controller nav so Minus (GamepadBack) opens the menu.
-    if (CVarGet(CVAR_IMGUI_CONTROLLER_NAV) == nullptr) {
-        CVarSetInteger(CVAR_IMGUI_CONTROLLER_NAV, 1);
+    {
+        // Switch defaults, only where the player hasn't chosen (before the window/renderer init
+        // reads them). Resolution/MSAA come from the graphics benchmark (Settings > Graphics).
+        auto defaultInt = [](const char* name, int32_t value) {
+            if (CVarGet(name) == nullptr) {
+                CVarSetInteger(name, value);
+            }
+        };
+        auto defaultFloat = [](const char* name, float value) {
+            if (CVarGet(name) == nullptr) {
+                CVarSetFloat(name, value);
+            }
+        };
+        // No keyboard for F1/Esc: controller nav so Minus (GamepadBack) opens the menu.
+        defaultInt(CVAR_IMGUI_CONTROLLER_NAV, 1);
+        defaultInt(CVAR_SETTING("InterpolationFPS"), 60);
+        defaultInt(CVAR_VSYNC_ENABLED, 1); // frame pacing relies on it
+        defaultFloat(CVAR_INTERNAL_RESOLUTION, 1.0f);
+        defaultInt(CVAR_MSAA_VALUE, 1);
+        // Compiled into the shaders: changing it rebuilds them all (and the prewarm lists hold
+        // what was recorded with this).
+        defaultInt(CVAR_TEXTURE_FILTER, Fast::FILTER_THREE_POINT);
+        defaultInt("gEnhancements.Graphics.DitherNoise", 0); // adds code to every shader
     }
 #endif
 

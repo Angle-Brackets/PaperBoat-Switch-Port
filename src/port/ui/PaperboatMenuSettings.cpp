@@ -1,3 +1,4 @@
+#include "port/switch/SwitchDebug.h"
 #include "Notification.h"
 #include "PaperboatInputEditorWindow.h"
 #include "PaperboatMenu.h"
@@ -344,10 +345,12 @@ void PaperboatMenu::AddMenuSettings() {
     path.column = SECTION_COLUMN_1;
     AddSidebarEntry("Settings", "Graphics", 2);
     AddWidget(path, "Graphics Options", WIDGET_SEPARATOR_TEXT);
+#ifndef __SWITCH__ // always fullscreen
     AddWidget(path, "Toggle Fullscreen", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) { Ship::Context::GetRawInstance()->GetWindow()->ToggleFullscreen(); })
         .Options(ButtonOptions().Tooltip("Toggles Fullscreen On/Off."));
+#endif
     AddWidget(path, "Internal Resolution", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_INTERNAL_RESOLUTION)
         .RaceDisable(false)
@@ -422,7 +425,17 @@ void PaperboatMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("MatchRefreshRate"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Matches interpolation value to the refresh rate of your display."));
+#ifdef __SWITCH__
+    // OpenGL is the only working backend here, so no Renderer API choice.
+    AddWidget(path, "Run Graphics Benchmark", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { SwitchGfxBench_Start(); })
+        .Options(ButtonOptions().Tooltip(
+            "Close the menu and stand somewhere busy: steps through resolution and MSAA settings for "
+            "the current mode (~12 s each), logs frame times, then restores your settings."));
+#else
     AddWidget(path, "Renderer API (Needs reload)", WIDGET_VIDEO_BACKEND).RaceDisable(false);
+#endif
     AddWidget(path, "Enable Vsync", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_VSYNC_ENABLED)
         .RaceDisable(false)
