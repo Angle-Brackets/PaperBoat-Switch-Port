@@ -565,7 +565,7 @@ void SaveManager_Init() {
             SaveData* newSaveData = new SaveData();
             gCurrentSaveFile = *newSaveData;
         }
-        CALL_EVENT(OnPostSaveFileLoad);
+        CALL_EVENT(OnPostSaveFileLoad, ev->saveSlot);
     })
 
     REGISTER_LISTENER(OnSaveFileErase, EVENT_PRIORITY_HIGH, [](IEvent* event) {

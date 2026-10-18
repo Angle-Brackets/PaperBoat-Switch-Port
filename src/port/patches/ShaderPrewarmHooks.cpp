@@ -82,10 +82,10 @@ static void RegisterShaderPrewarmHooks_Init() {
     REGISTER_LISTENER(OnBattleStart, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
         Fast::ShaderPrewarm::EnterArea(BattleKey(((OnBattleStart*) event)->battleID));
     });
-    // File select reads every slot's save to show it; note each one's area. Runs after the
-    // SaveManager's (high priority) listener has filled gCurrentSaveFile.
-    REGISTER_LISTENER(OnSaveFileLoad, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
-        const int32_t slot = ((OnSaveFileLoad*) event)->saveSlot;
+    // File select reads every slot's save to show it; note each one's area. (OnSaveFileLoad itself
+    // is cancelled by the SaveManager, which replaces the load and then fires this.)
+    REGISTER_LISTENER(OnPostSaveFileLoad, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
+        const int32_t slot = ((OnPostSaveFileLoad*) event)->saveSlot;
         if (slot >= 0 && slot < 4) {
             sSlotArea[slot] = AreaOf(gCurrentSaveFile.areaID, gCurrentSaveFile.mapID);
         }
@@ -143,6 +143,7 @@ extern "C" int port_shaderPrewarmBackground(int drawing) {
         }
     }
     if (!want.empty() && want != sHinted) {
+        SPDLOG_INFO("[shaders] background prewarm: hinting {} (game mode {})", want, mode);
         sHinted = want;
         Fast::ShaderPrewarm::Hint({ want });
     }

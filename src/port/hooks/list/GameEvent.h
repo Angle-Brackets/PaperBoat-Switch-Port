@@ -39,7 +39,9 @@ DEFINE_EVENT(OnPlayerSPChange,
 DEFINE_EVENT(OnPlayerBPCostCheck);
 
 // Gameplay > CutsceneSkips
-DEFINE_EVENT(OnPostSaveFileLoad);
+DEFINE_EVENT(OnPostSaveFileLoad,
+    int32_t saveSlot;
+);
 
 // Battle
 DEFINE_EVENT(OnBattleEffectsRemoved);
