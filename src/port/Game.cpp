@@ -45,9 +45,11 @@ void* Graphics_TaskFromList(const void* osTask);
 uint32_t Graphics_TaskFlags(const void* nuTask);
 int32_t Graphics_ShouldCapturePrevFrame(void);
 void Graphics_DrawFrame(Gfx* backgroundList, Gfx* mainList, int32_t capturePrevFrame);
+extern int32_t gOverrideFlags;
 }
 
 #define NU_SC_SWAPBUFFER 0x0001 /* nusys.h */
+constexpr int32_t kOverrideDisableDrawFrame = 0x8; /* GLOBAL_OVERRIDES_DISABLE_DRAW_FRAME, enums.h */
 #define NU_SC_NORDP      0x0002
 
 namespace {
@@ -156,9 +158,8 @@ extern "C"
     Graphics_Start();
     SWITCH_MEM_CHECKPOINT("Graphics_Start");
 
-    // Idle-time shader prewarm: when the last GFX task ran, and whether a shader was compiled since.
-    auto lastTask = std::chrono::steady_clock::now();
-    bool compiledSinceTask = false;
+    // Idle-time shader prewarm: when the last one compiled while frames were being drawn.
+    auto lastDrawingCompile = std::chrono::steady_clock::now();
 
     while (wnd->IsRunning()) {
         ThreadWatchdog_Beat(WATCHDOG_MAIN_LOOP);
@@ -185,26 +186,28 @@ extern "C"
         const bool ranTask = ServiceRcp();
         SWITCH_PHASE_END(1);
 #undef SWITCH_PHASE_END
-        if (ranTask) {
-            lastTask = std::chrono::steady_clock::now();
-            compiledSinceTask = false;
-        } else {
+        if (!ranTask) {
             if (ThreadWatchdog_IsStalled(WATCHDOG_GAME_TICK)) {
                 GameEngine::Instance->RenderGuiFrame();
                 SDL_Delay(16);
                 continue;
             }
-            // No task for longer than a 30 Hz frame: the game isn't drawing (map/battle load),
-            // so queued shaders compile back to back. While drawing, at most one per frame.
-            const bool drawing = std::chrono::steady_clock::now() - lastTask < std::chrono::milliseconds(45);
+            // While the game skips drawing (map/battle loads) queued shaders compile back to back;
+            // while it draws, at most one per 30 Hz frame. (Audio tasks keep arriving during loads,
+            // so "no task lately" can't tell the two apart; the game's own flag can.)
+            const auto now = std::chrono::steady_clock::now();
+            const bool drawing = !(gOverrideFlags & kOverrideDisableDrawFrame);
             std::pair<uint64_t, uint64_t> shader;
-            if ((!drawing || !compiledSinceTask) && Fast::ShaderPrewarm::TakeOne(shader, drawing)) {
+            if ((!drawing || now - lastDrawingCompile >= std::chrono::milliseconds(33)) &&
+                Fast::ShaderPrewarm::TakeOne(shader, drawing)) {
                 if (auto interpreter = wnd->GetInterpreterWeak().lock()) {
                     const std::vector<std::pair<uint64_t, uint64_t>> one { shader };
                     size_t cursor = 0;
                     interpreter->PrewarmSome(one, cursor, 0.0);
                 }
-                compiledSinceTask = drawing;
+                if (drawing) {
+                    lastDrawingCompile = std::chrono::steady_clock::now();
+                }
             } else {
                 SDL_Delay(1);
             }
