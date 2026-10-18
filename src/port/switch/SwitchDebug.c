@@ -76,6 +76,8 @@ extern uint64_t gLusRunMicros;
 extern uint64_t gLusDrawMicros;
 extern uint64_t gLusUniformMicros;
 extern uint64_t gLusVboMicros;
+extern uint64_t gLusVboMaxMicros;
+extern uint64_t gLusDrawMaxMicros;
 extern uint32_t gLusDraws;
 extern uint32_t gLusTris;
 extern uint32_t gLusOps;
@@ -108,11 +110,12 @@ static void PrintFrameStats(const char* tag) {
         for (int i = 0; i < 8; i++) {
             why[i] = (gLusFlushWhy[i] - sWhy[i]) / p;
         }
-        MonitorLog("%s draw: run %.2f ms (gl %.2f: unif %.2f vbo %.2f) | %.0f draws %.0f tris %.0f ops | "
+        MonitorLog("%s draw: run %.2f ms (gl %.2f: unif %.2f vbo %.2f; max draw %.1f vbo %.1f) | %.0f draws %.0f tris %.0f ops | "
                    "tex %.1f binds %.1f miss %.1f same | pal %.1f prg %.1f | why tex %.1f cc %.1f prg %.1f "
                    "unif %.1f mtx %.1f light %.1f pal %.1f other %.1f",
                    tag, (gLusRunMicros - sRun) / 1000.0 / p, (gLusDrawMicros - sDraw) / 1000.0 / p,
                    (gLusUniformMicros - sUnif) / 1000.0 / p, (gLusVboMicros - sVbo) / 1000.0 / p,
+                   gLusDrawMaxMicros / 1000.0, gLusVboMaxMicros / 1000.0,
                    (gLusDraws - sDraws) / p, (gLusTris - sTris) / p, (gLusOps - sOps) / p,
                    (gLusTexImportCount - sTexImports) / p, (gLusTexMiss - sTexMiss) / p,
                    (gLusTexSame - sTexSame) / p, (gLusPalUploads - sPal) / p, (gLusPrgSwitch - sPrg) / p, why[0],
@@ -122,6 +125,8 @@ static void PrintFrameStats(const char* tag) {
     sDraw = gLusDrawMicros;
     sUnif = gLusUniformMicros;
     sVbo = gLusVboMicros;
+    gLusDrawMaxMicros = 0;
+    gLusVboMaxMicros = 0;
     sDraws = gLusDraws;
     sTris = gLusTris;
     sOps = gLusOps;
