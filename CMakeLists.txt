@@ -62,6 +62,24 @@ if(ANDROID)
     add_compile_definitions(USE_OPENGLES=1)
 endif()
 
+# devkitA64 via /opt/devkitpro/cmake/Switch.cmake. Its platform file already
+# supplies the arch flags, -D__SWITCH__, -specs=switch.specs and -lnx; check
+# for the specs rather than add them twice (a second copy doubles crt0).
+if(NINTENDO_SWITCH)
+    if(NOT CMAKE_EXE_LINKER_FLAGS MATCHES "switch\\.specs")
+        add_link_options(-specs=${DEVKITPRO}/libnx/switch.specs)
+    endif()
+
+    # mesa/nouveau gives desktop GL; there is no DirectX, Metal or Vulkan.
+    set(USE_OPENGLES OFF CACHE BOOL "" FORCE)
+    add_compile_definitions(ENABLE_OPENGL)
+
+    set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -DDEBUG")
+    set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+endif()
+
 set(NATO_PHONETIC_ALPHABET
   "Alfa" "Bravo" "Charlie" "Delta" "Echo" "Foxtrot" "Golf" "Hotel"
   "India" "Juliett" "Kilo" "Lima" "Mike" "November" "Oscar" "Papa"
@@ -142,9 +160,10 @@ include(FetchContent)
 # libultraship dependencies the platform files don't cover
 #
 # libultraship has no cmake/dependencies/emscripten.cmake, so its
-# find_package(... REQUIRED) calls have nothing to find without these.
+# find_package(... REQUIRED) calls have nothing to find without these. The
+# Switch portlibs don't carry libzip, nlohmann_json or spdlog either.
 ################################################################################
-if(EMSCRIPTEN)
+if(EMSCRIPTEN OR NINTENDO_SWITCH)
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
     set(tinyxml2_BUILD_TESTING OFF)
@@ -170,22 +189,49 @@ if(EMSCRIPTEN)
         OVERRIDE_FIND_PACKAGE
     )
 
-    # libzip finds zlib through find_package; a stale redirect from an earlier
-    # configure would point at a port emcc has not built yet.
-    file(REMOVE
-        "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlib-config.cmake"
-        "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlib-config-version.cmake"
-        "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlibConfig.cmake"
-        "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlibConfigVersion.cmake")
-    set(_emsysroot "${EMSCRIPTEN_SYSROOT}")
-    if(NOT _emsysroot)
-        set(_emsysroot "${CMAKE_SYSROOT}")
+    if(EMSCRIPTEN)
+        # libzip finds zlib through find_package; a stale redirect from an earlier
+        # configure would point at a port emcc has not built yet.
+        file(REMOVE
+            "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlib-config.cmake"
+            "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlib-config-version.cmake"
+            "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlibConfig.cmake"
+            "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlibConfigVersion.cmake")
+        set(_emsysroot "${EMSCRIPTEN_SYSROOT}")
+        if(NOT _emsysroot)
+            set(_emsysroot "${CMAKE_SYSROOT}")
+        endif()
+        if(NOT _emsysroot)
+            message(FATAL_ERROR "Could not determine the Emscripten sysroot for zlib")
+        endif()
+        set(ZLIB_INCLUDE_DIR "${_emsysroot}/include" CACHE PATH "" FORCE)
+        set(ZLIB_LIBRARY "${_emsysroot}/lib/wasm32-emscripten/libz.a" CACHE FILEPATH "" FORCE)
+    else()
+        # switch-zlib is optional in dkp-libs. Torch fetches this same zlib as
+        # zlibstatic; declaring it first makes libzip and torch share one copy.
+        set(ZLIB_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(ZLIB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            zlib
+            GIT_REPOSITORY https://github.com/madler/zlib.git
+            GIT_TAG v1.3.1
+            OVERRIDE_FIND_PACKAGE
+        )
+        FetchContent_MakeAvailable(zlib)
+        # zlib 1.3.1 sets its include dirs per-directory, not on the target.
+        target_include_directories(zlibstatic INTERFACE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+        add_library(ZLIB::ZLIB ALIAS zlibstatic)
+        set(ZLIB_FOUND TRUE)
+        set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+        set(ZLIB_INCLUDE_DIRS ${ZLIB_INCLUDE_DIR})
+        set(ZLIB_LIBRARY zlibstatic)
+        set(ZLIB_LIBRARIES zlibstatic)
+        set(ZLIB_VERSION 1.3.1)
+        set(ZLIB_VERSION_STRING 1.3.1)
+        set(LIBZIP_DO_INSTALL OFF)
     endif()
-    if(NOT _emsysroot)
-        message(FATAL_ERROR "Could not determine the Emscripten sysroot for zlib")
-    endif()
-    set(ZLIB_INCLUDE_DIR "${_emsysroot}/include" CACHE PATH "" FORCE)
-    set(ZLIB_LIBRARY "${_emsysroot}/lib/wasm32-emscripten/libz.a" CACHE FILEPATH "" FORCE)
 
     set(BUILD_TOOLS OFF)
     set(BUILD_REGRESS OFF)
@@ -209,10 +255,16 @@ if(EMSCRIPTEN)
     )
 
     FetchContent_MakeAvailable(tinyxml2 nlohmann_json spdlog libzip)
+
+    # spdlog builds with -std=c++20, and newlib hides fileno/fwrite_unlocked
+    # outside the GNU dialect.
+    if(NINTENDO_SWITCH)
+        set_target_properties(spdlog PROPERTIES CXX_EXTENSIONS ON)
+    endif()
 endif()
 
 # None of these can dlopen a native mod, and TCC has no backend for them.
-if(ANDROID OR IOS OR EMSCRIPTEN)
+if(ANDROID OR IOS OR EMSCRIPTEN OR NINTENDO_SWITCH)
     set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
     set(DISABLE_DLL_LOADER ON CACHE BOOL "" FORCE)
 endif()
@@ -239,6 +291,10 @@ set(BUILD_MARIO_ARTIST OFF CACHE BOOL "" FORCE)
 set(BUILD_BK64 OFF CACHE BOOL "" FORCE)
 set(BUILD_OOT OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/torch)
+# Torch turns GNU extensions off; newlib then hides miniz's fseeko/ftello.
+if(NINTENDO_SWITCH)
+    set_target_properties(torch PROPERTIES CXX_EXTENSIONS ON)
+endif()
 
 # Collect all game C sources (excluding .inc.c which are included by other files)
 # Also, dx now has some cpp files.
@@ -488,6 +544,13 @@ if(ANDROID)
     target_link_libraries(${PROJECT_NAME} PRIVATE libzip::zip GLESv3 EGL android log)
 endif()
 
+if(NINTENDO_SWITCH)
+    FetchContent_GetProperties(libzip)
+    if(libzip_SOURCE_DIR)
+        target_include_directories(${PROJECT_NAME} PRIVATE ${libzip_SOURCE_DIR}/lib ${libzip_BINARY_DIR})
+    endif()
+endif()
+
 if(EMSCRIPTEN)
     # zip.h/zipconf.h, for the libultraship headers the game code includes.
     FetchContent_GetProperties(libzip)
@@ -672,6 +735,44 @@ elseif(ANDROID OR EMSCRIPTEN)
     )
     target_link_options(${PROJECT_NAME} PRIVATE -pthread)
 
+elseif(NINTENDO_SWITCH)
+    # Flags follow Shipwright's soh/CMakeLists.txt Switch branch.
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        -Wall -Wextra -Wno-error
+        -Wformat-security
+        -Wno-return-type
+        -Wno-unused-parameter
+        -Wno-unused-function
+        -Wno-unused-variable
+        -Wno-missing-field-initializers
+        -Wno-parentheses
+        -Wno-narrowing
+        -Wno-missing-braces
+        -Wno-unknown-pragmas
+        $<$<COMPILE_LANGUAGE:C>:-Wno-incompatible-pointer-types>
+        $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-enum-enum-conversion>
+        -pthread
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE -pthread)
+
+    # Same stack libultraship's switch.cmake gives ImGui, repeated so the
+    # single-pass linker sees it after the game objects.
+    find_package(SDL2 REQUIRED)
+    find_package(OpenGL REQUIRED)
+    find_library(GLAD_LIBRARY glad REQUIRED)
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        SDL2::SDL2
+        ${GLAD_LIBRARY}
+        ${OPENGL_egl_LIBRARY}
+        ${_OPENGL_glapi_LIBRARY}
+        ${_OPENGL_drm_nouveau_LIBRARY}
+        Threads::Threads
+        nx
+    )
+
 elseif(UNIX)
     # Linux-specific settings
     find_package(OpenGL REQUIRED)
@@ -763,6 +864,21 @@ if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
     set(CPACK_GENERATOR "Bundle")
     set(CPACK_PROJECT_CONFIG_FILE ${CMAKE_SOURCE_DIR}/cmake/configure-packaging.cmake)
     include(cmake/packaging.cmake)
+endif()
+
+if(NINTENDO_SWITCH)
+    # Paperboat.elf -> paperboat.nro, rebuilt on every build (the _nro target is ALL).
+    nx_generate_nacp(OUTPUT paperboat.nacp
+        NAME "PaperBoat"
+        AUTHOR "Harbour Masters / Port"
+        VERSION "1.0.0"
+    )
+
+    nx_create_nro(${PROJECT_NAME}
+        OUTPUT ${CMAKE_BINARY_DIR}/paperboat.nro
+        NACP paperboat.nacp
+        ICON ${CMAKE_SOURCE_DIR}/switch/icon.jpg
+    )
 endif()
 
 message(STATUS "Configuring ${PROJECT_NAME} v${PROJECT_VERSION}")
