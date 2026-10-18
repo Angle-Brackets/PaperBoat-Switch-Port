@@ -1,0 +1,120 @@
+// Switch-only debug plumbing: stdout/stderr over nxlink, and a crash handler that
+// dumps registers and a frame-pointer backtrace there before the process dies.
+// Kept in its own file because <switch.h>'s u64 clashes with the game's ultratypes.
+
+#ifdef __SWITCH__
+
+#include <switch.h>
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+static int sNxlinkSock = -1;
+
+// Runs before main() and before static constructors, so the earliest log lines
+// make it across. nxlinkStdio only connects when the NRO was sent by nxlink.
+void userAppInit(void) {
+    if (R_SUCCEEDED(socketInitializeDefault())) {
+        sNxlinkSock = nxlinkStdio();
+        if (sNxlinkSock >= 0) {
+            setvbuf(stdout, NULL, _IONBF, 0);
+            setvbuf(stderr, NULL, _IONBF, 0);
+            printf("[switch] nxlink stdio connected\n");
+        }
+    }
+}
+
+void userAppExit(void) {
+    if (sNxlinkSock >= 0) {
+        close(sNxlinkSock);
+        sNxlinkSock = -1;
+    }
+    socketExit();
+}
+
+alignas(16) u8 __nx_exception_stack[0x8000];
+u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
+
+// snprintf + write rather than printf: the faulting thread may hold stdout's lock.
+static void CrashPrint(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+static void CrashPrint(const char* fmt, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (len > 0) {
+        write(STDERR_FILENO, buf, len < (int) sizeof(buf) ? len : (int) sizeof(buf) - 1);
+    }
+}
+
+static const char* ExceptionName(u32 desc) {
+    switch (desc) {
+        case ThreadExceptionDesc_InstructionAbort:
+            return "Instruction Abort";
+        case ThreadExceptionDesc_MisalignedPC:
+            return "Misaligned PC";
+        case ThreadExceptionDesc_MisalignedSP:
+            return "Misaligned SP";
+        case ThreadExceptionDesc_SError:
+            return "SError";
+        case ThreadExceptionDesc_BadSVC:
+            return "Bad SVC";
+        case ThreadExceptionDesc_Trap:
+            return "Trap (data abort / undefined instruction)";
+        default:
+            return "Other";
+    }
+}
+
+// Prints "addr (Paperboat+0xoff)" when addr is inside our module; run.sh symbolizes those.
+static void CrashPrintAddr(const char* label, u64 addr, u64 base, u64 size) {
+    if (addr >= base && addr < base + size) {
+        CrashPrint("%s 0x%016lx (Paperboat+0x%lx)\n", label, addr, addr - base);
+    } else {
+        CrashPrint("%s 0x%016lx\n", label, addr);
+    }
+}
+
+void __libnx_exception_handler(ThreadExceptionDump* ctx) {
+    // The module's code segment starts at its base (first PT_LOAD is at 0).
+    MemoryInfo info;
+    u32 page;
+    u64 base = 0, size = 0;
+    if (R_SUCCEEDED(svcQueryMemory(&info, &page, (u64) (uintptr_t) &__libnx_exception_handler))) {
+        base = info.addr;
+        size = 0x2000000; // generous upper bound; covers text + rodata + data
+    }
+
+    CrashPrint("\n========== PAPERBOAT CRASH ==========\n");
+    CrashPrint("Exception: %s (0x%x)\n", ExceptionName(ctx->error_desc), ctx->error_desc);
+    CrashPrint("Module base: 0x%016lx\n", base);
+    CrashPrintAddr("PC: ", ctx->pc.x, base, size);
+    CrashPrintAddr("LR: ", ctx->lr.x, base, size);
+    CrashPrint("SP:  0x%016lx  FP: 0x%016lx  FAR: 0x%016lx\n", ctx->sp.x, ctx->fp.x, ctx->far.x);
+    for (int i = 0; i < 29; i++) {
+        CrashPrint("X%02d: 0x%016lx%s", i, ctx->cpu_gprs[i].x, (i % 2) ? "\n" : "   ");
+    }
+    CrashPrint("\nBacktrace:\n");
+
+    // AArch64 frame record: fp[0] = caller's fp, fp[1] = return address.
+    u64 fp = ctx->fp.x;
+    u64 stackLo = ctx->sp.x;
+    u64 stackHi = ctx->sp.x + 0x400000;
+    for (int i = 0; i < 48 && fp >= stackLo && fp < stackHi && (fp & 0xF) == 0; i++) {
+        const u64* frame = (const u64*) (uintptr_t) fp;
+        char label[16];
+        snprintf(label, sizeof(label), "  #%02d", i);
+        CrashPrintAddr(label, frame[1], base, size);
+        if (frame[0] <= fp) {
+            break;
+        }
+        fp = frame[0];
+    }
+    CrashPrint("=====================================\n");
+    // Returning hands the exception back to the kernel, so Atmosphère still writes its report.
+}
+
+#endif // __SWITCH__
