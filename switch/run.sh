@@ -34,6 +34,6 @@ symbolize() {
 }
 
 echo ">> sending to $IP (saved as sdmc:/switch/paperboat/paperboat.nro)"
-# -p overwrites the copy in the game folder instead of leaving a second one in sdmc:/switch/.
-stdbuf -oL -eL "$NXLINK" -a "$IP" -r 3 -p /switch/paperboat/paperboat.nro -s "$BUILD/paperboat.nro" 2>&1 \
+# -p is relative to sdmc:/switch/; overwrites the copy in the game folder instead of leaving a second one.
+stdbuf -oL -eL "$NXLINK" -a "$IP" -r 3 -p paperboat/paperboat.nro -s "$BUILD/paperboat.nro" 2>&1 \
     | symbolize | tee "$BUILD/last-run.log"
