@@ -15,6 +15,9 @@
 #include <SDL2/SDL.h>
 #include "port/web/WebUtils.h"
 #endif
+#ifdef __SWITCH__
+extern "C" void SwitchDebug_LoopTick(void); // port/switch/SwitchDebug.c
+#endif
 #ifdef __ANDROID__
 // Redefines main() to SDL_main(), which SDLActivity calls into. The game data
 // is unpacked before this process starts, by GameAssets.kt.
@@ -142,6 +145,9 @@ extern "C"
 
     while (wnd->IsRunning()) {
         ThreadWatchdog_Beat(WATCHDOG_MAIN_LOOP);
+#ifdef __SWITCH__
+        SwitchDebug_LoopTick();
+#endif
         GameEngine::Instance->StartFrame();
         OS_SiService();
         GameEngine::DrainRenderService();

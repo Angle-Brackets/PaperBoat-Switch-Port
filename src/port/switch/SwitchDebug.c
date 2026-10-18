@@ -6,6 +6,7 @@
 
 #include <switch.h>
 
+#include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,6 +33,53 @@ void userAppExit(void) {
         sNxlinkSock = -1;
     }
     socketExit();
+}
+
+// Bumped by LUS's GL backend each time it compiles a shader program.
+extern uint32_t gLusShaderCompileCount;
+extern uint64_t gLusShaderCompileMicros;
+
+#define HITCH_THRESHOLD_NS (40ULL * 1000000ULL) // a 60 fps frame is 16.7 ms
+#define STATS_INTERVAL_NS (10ULL * 1000000000ULL)
+
+static void PrintMemoryStats(const char* tag) {
+    u64 total = 0, used = 0;
+    svcGetInfo(&total, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
+    svcGetInfo(&used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
+    struct mallinfo mi = mallinfo();
+    printf("[switch] %s mem: used %lu / %lu MiB (%lu MiB free), malloc in use %u MiB, heap arena %u MiB, "
+           "shaders %u (%lu ms total)\n",
+           tag, used >> 20, total >> 20, (total - used) >> 20, (unsigned) (mi.uordblks >> 20),
+           (unsigned) (mi.arena >> 20), gLusShaderCompileCount, gLusShaderCompileMicros / 1000);
+}
+
+// Called once per main-loop iteration. The main thread renders, so a long
+// iteration is a visible hitch; shader compiles inside it are reported with it.
+void SwitchDebug_LoopTick(void) {
+    static u64 sLastTick = 0, sLastStatsTick = 0;
+    static uint32_t sLastShaderCount = 0;
+    static uint64_t sLastShaderMicros = 0;
+
+    const u64 now = armGetSystemTick();
+    if (sLastTick == 0) {
+        sLastTick = sLastStatsTick = now;
+        PrintMemoryStats("start");
+        return;
+    }
+
+    const u64 elapsedNs = armTicksToNs(now - sLastTick);
+    if (elapsedNs > HITCH_THRESHOLD_NS) {
+        printf("[switch] hitch: %lu ms, +%u shaders compiled (%lu ms)\n", elapsedNs / 1000000,
+               gLusShaderCompileCount - sLastShaderCount, (gLusShaderCompileMicros - sLastShaderMicros) / 1000);
+    }
+    sLastShaderCount = gLusShaderCompileCount;
+    sLastShaderMicros = gLusShaderCompileMicros;
+    sLastTick = now;
+
+    if (armTicksToNs(now - sLastStatsTick) > STATS_INTERVAL_NS) {
+        sLastStatsTick = now;
+        PrintMemoryStats("periodic");
+    }
 }
 
 alignas(16) u8 __nx_exception_stack[0x8000];
