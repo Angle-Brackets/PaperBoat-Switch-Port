@@ -23,6 +23,7 @@ s32 D_800778AC[] = {
 };
 
 BSS s8 BattleTransitionDelay;
+BSS b8 BattleAwaitShaders; // PORT
 BSS s32 SavedWorldAnimFlags;
 BSS s32 SavedWorldFreezeMode;
 
@@ -34,6 +35,7 @@ extern ShapeFile gMapShapeData;
 
 void state_init_battle(void) {
     BattleTransitionDelay = 5;
+    BattleAwaitShaders = false; // PORT
 }
 
 void state_step_battle(void) {
@@ -101,11 +103,22 @@ void state_step_battle(void) {
         gPlayerStatusPtr->animFlags &= ~PA_FLAG_PULSE_STONE_VISIBLE;
         SavedWorldFreezeMode = get_time_freeze_mode();
         set_time_freeze_mode(TIME_FREEZE_NONE);
-        gOverrideFlags &= ~GLOBAL_OVERRIDES_DISABLE_DRAW_FRAME;
+        // PORT: drawing resumes below, once the battle area's shaders are compiled.
+        BattleAwaitShaders = true;
 
         if (BattleTransitionDelay >= 0) {
             return;
         }
+    }
+
+    // PORT: hold the screen black (frames undrawn, so queued shaders compile back to back) until the
+    // battle area's shaders are built. Nothing battle-side has started yet, as in the delay above.
+    if (BattleAwaitShaders) {
+        if (port_shaderPrewarmBusy()) {
+            return;
+        }
+        BattleAwaitShaders = false;
+        gOverrideFlags &= ~GLOBAL_OVERRIDES_DISABLE_DRAW_FRAME;
     }
 
     update_encounters();

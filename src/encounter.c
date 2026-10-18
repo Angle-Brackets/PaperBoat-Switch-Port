@@ -1636,6 +1636,11 @@ void update_encounters_post_battle(void) {
             if (currentEncounter->unk_08 == 0) {
                 return;
             }
+            // PORT: back from a battle the overlay is still at 255; let the restored map's first (slow)
+            // frames pass before the fade-in starts. Auto-win/skip arrive at 0 and don't wait.
+            if (currentEncounter->fadeOutAmount == 255 && !port_renderSettled()) {
+                return;
+            }
 
             currentEncounter->unk_08 = 0;
             gPlayerStatus.blinkTimer = 0;

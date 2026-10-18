@@ -244,6 +244,11 @@ void btl_state_update_normal_start(void) {
             gBattleSubState = BTL_SUBSTATE_CHECK_FIRST_STRIKE;
             break;
         case BTL_SUBSTATE_CHECK_FIRST_STRIKE:
+            // PORT: stay black (BattleScreenFadeAmt 255) until the renderer keeps up; the first battle
+            // frames load stage/actor assets. Before any intro script starts, so their timing holds.
+            if (!port_renderSettled()) {
+                break;
+            }
             enemyNotDone = false;
             for (i = 0; i < BattleEnemiesCreated; i++) {
                 actor = battleStatus->enemyActors[i];
