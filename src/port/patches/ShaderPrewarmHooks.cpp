@@ -12,6 +12,12 @@
 #include "port/hooks/Events.h"
 #include "port/ShipInit.hpp"
 
+#include "common.h"
+#include "filemenu.h"
+#include "fio.h"
+#include "game_modes.h"
+#include "map.h"
+
 #ifdef __SWITCH__
 // Compiles cost 40-100 ms each and the driver can't cache them; prewarming is the only fix.
 #define SHADER_PREWARM_DEFAULT 1
@@ -21,6 +27,16 @@
 
 // The world area to return to after a battle.
 static std::string sWorldArea;
+// Each save slot's area, read as file select loads the slots' metadata.
+static std::string sSlotArea[4];
+
+static std::string AreaOf(s32 areaID, s32 mapID) {
+    if (areaID < 0 || areaID >= (s32) ARRAY_COUNT(gAreas) || gAreas[areaID].maps == nullptr || mapID < 0 ||
+        mapID >= gAreas[areaID].mapCount) {
+        return {};
+    }
+    return std::string(gAreas[areaID].maps[mapID].id).substr(0, 3);
+}
 
 // Battles are keyed by battle area ("btl_" + UNPACK_BTL_AREA); their debug names aren't usable.
 static std::string BattleKey(int32_t battleID) {
@@ -49,16 +65,38 @@ static void RegisterShaderPrewarmHooks_Init() {
     // Fires from load_map_by_IDs while the screen is faded out, including loading a save.
     REGISTER_LISTENER(OnMapLoad, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
         if (const char* mapName = ((OnMapLoad*) event)->mapName) {
-            sWorldArea = std::string(mapName).substr(0, 3);
+            const std::string area = std::string(mapName).substr(0, 3);
+            if (gGameStatusPtr->demoState == DEMO_STATE_NONE) { // the title's attract demo isn't a route
+                Fast::ShaderPrewarm::NoteLink(sWorldArea, area);
+            }
+            sWorldArea = area;
             Fast::ShaderPrewarm::EnterArea(sWorldArea);
         }
     });
     // The pre-battle swirl runs ~1 s; past 600 ms it's mostly covered, then 10 black frames follow.
     REGISTER_LISTENER(OnBattlePrepare, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
-        Fast::ShaderPrewarm::PrepareArea(BattleKey(((OnBattlePrepare*) event)->battleID), 600);
+        const std::string key = BattleKey(((OnBattlePrepare*) event)->battleID);
+        Fast::ShaderPrewarm::NoteLink(sWorldArea, key); // which battles happen in this area
+        Fast::ShaderPrewarm::PrepareArea(key, 600);
     });
     REGISTER_LISTENER(OnBattleStart, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
         Fast::ShaderPrewarm::EnterArea(BattleKey(((OnBattleStart*) event)->battleID));
+    });
+    // File select reads every slot's save to show it; note each one's area. Runs after the
+    // SaveManager's (high priority) listener has filled gCurrentSaveFile.
+    REGISTER_LISTENER(OnSaveFileLoad, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
+        const int32_t slot = ((OnSaveFileLoad*) event)->saveSlot;
+        if (slot >= 0 && slot < 4) {
+            sSlotArea[slot] = AreaOf(gCurrentSaveFile.areaID, gCurrentSaveFile.mapID);
+        }
+    });
+    // For the title screen, before file select has read anything: the area each slot was saved in.
+    REGISTER_LISTENER(OnSaveFileSave, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
+        const SaveData* save = (const SaveData*) ((OnSaveFileSave*) event)->saveData;
+        if (save != nullptr) {
+            Fast::ShaderPrewarm::Remember("slot" + std::to_string(gGameStatusPtr->saveSlot),
+                                          AreaOf(save->areaID, save->mapID));
+        }
     });
     // Back to the world's shaders (already built, so nothing recompiles) and its recording key.
     REGISTER_LISTENER(OnBattleEnd, EVENT_PRIORITY_NORMAL, [](IEvent*) {
@@ -83,6 +121,48 @@ extern "C" int port_shaderPrewarmBusy(void) {
         sHoldStart = now;
     }
     return now - sHoldStart < kMaxHold;
+}
+
+// Reads game-thread state from the main thread without locking; it only steers a hint.
+extern "C" int port_shaderPrewarmBackground(int drawing) {
+    static std::string sHinted;
+    static auto sLastInput = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    const s32 mode = get_game_mode();
+    const bool fileSelect = mode == GAME_MODE_FILE_SELECT && filemenu_currentMenu == FILE_MENU_MAIN &&
+                            filemenu_menus[0] != nullptr && filemenu_menus[0]->initialized;
+
+    // The save about to be loaded: highlighted in file select, else the last one used.
+    std::string want;
+    if (mode == GAME_MODE_TITLE_SCREEN) {
+        want = Fast::ShaderPrewarm::Recall("slot" + std::to_string(gSaveGlobals.lastFileSelected & 3));
+    } else if (fileSelect) {
+        const s32 slot = filemenu_menus[0]->selected;
+        if (slot >= 0 && slot < 4 && gSaveSlotMetadata[slot].hasData) {
+            want = sSlotArea[slot];
+        }
+    }
+    if (!want.empty() && want != sHinted) {
+        sHinted = want;
+        Fast::ShaderPrewarm::Hint({ want });
+    }
+
+    if (!drawing) {
+        return 1;
+    }
+    if (gGameStatusPtr->pressedButtons[0] | gGameStatusPtr->heldButtons[0]) {
+        sLastInput = now;
+    }
+    switch (mode) {
+        case GAME_MODE_TITLE_SCREEN:
+            return gGameStatusPtr->startupState == 2; // TITLE_STATE_HOLD: static but for PRESS START
+        case GAME_MODE_FILE_SELECT:
+            // Static until a button moves the cursor.
+            return fileSelect && filemenu_menus[0]->state == FM_MAIN_SELECT_FILE &&
+                   now - sLastInput > std::chrono::milliseconds(300);
+        default:
+            return 0;
+    }
 }
 
 static RegisterShipInitFunc initFunc(RegisterShaderPrewarmHooks_Init);

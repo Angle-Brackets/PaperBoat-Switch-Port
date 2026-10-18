@@ -197,18 +197,28 @@ extern "C"
             // so "no task lately" can't tell the two apart; the game's own flag can.)
             const auto now = std::chrono::steady_clock::now();
             const bool drawing = !(gOverrideFlags & kOverrideDisableDrawFrame);
-            std::pair<uint64_t, uint64_t> shader;
-            if ((!drawing || now - lastDrawingCompile >= std::chrono::milliseconds(33)) &&
-                Fast::ShaderPrewarm::TakeOne(shader, drawing)) {
-                if (auto interpreter = wnd->GetInterpreterWeak().lock()) {
+            // Predicted areas' shaders: whenever nothing is drawn, and sparsely on static screens.
+            const bool background = port_shaderPrewarmBackground(drawing);
+            const auto gap = std::chrono::milliseconds(drawing && background ? 200 : 33);
+            bool took = false;
+            if (!drawing || now - lastDrawingCompile >= gap) {
+                auto interpreter = wnd->GetInterpreterWeak().lock();
+                std::pair<uint64_t, uint64_t> shader;
+                size_t compiled = 0;
+                // Skip ones a draw has built in the meantime, so a slot isn't spent on a no-op.
+                for (int tries = 0; interpreter && compiled == 0 && tries < 16 &&
+                                    Fast::ShaderPrewarm::TakeOne(shader, drawing, background);
+                     tries++) {
+                    took = true;
                     const std::vector<std::pair<uint64_t, uint64_t>> one { shader };
                     size_t cursor = 0;
-                    interpreter->PrewarmSome(one, cursor, 0.0);
+                    compiled = interpreter->PrewarmSome(one, cursor, 0.0);
                 }
-                if (drawing) {
+                if (drawing && compiled > 0) {
                     lastDrawingCompile = std::chrono::steady_clock::now();
                 }
-            } else {
+            }
+            if (!took) {
                 SDL_Delay(1);
             }
         }
