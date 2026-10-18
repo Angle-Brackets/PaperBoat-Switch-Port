@@ -874,10 +874,24 @@ if(NINTENDO_SWITCH)
         VERSION "1.0.0"
     )
 
+    # paperboat.o2r (shaders, port assets) rides inside the NRO's romfs, so it always matches the
+    # binary and reaches the console with every nxlink send. The game reads romfs:/paperboat.o2r.
+    set(PAPERBOAT_ROMFS_DIR "${CMAKE_BINARY_DIR}/romfs")
+    file(MAKE_DIRECTORY "${PAPERBOAT_ROMFS_DIR}")
+    add_custom_command(
+        OUTPUT "${PAPERBOAT_ROMFS_DIR}/paperboat.o2r"
+        COMMAND ${CMAKE_COMMAND} -E copy "${PAPERBOAT_PORT_O2R}" "${PAPERBOAT_ROMFS_DIR}/paperboat.o2r"
+        DEPENDS "${PAPERBOAT_PORT_O2R}"
+        VERBATIM
+    )
+    add_custom_target(StagePortRomfs DEPENDS "${PAPERBOAT_ROMFS_DIR}/paperboat.o2r")
+    add_dependencies(${PROJECT_NAME} StagePortRomfs)
+
     nx_create_nro(${PROJECT_NAME}
         OUTPUT ${CMAKE_BINARY_DIR}/paperboat.nro
         NACP paperboat.nacp
         ICON ${CMAKE_SOURCE_DIR}/switch/icon.jpg
+        ROMFS "${PAPERBOAT_ROMFS_DIR}"
     )
 endif()
 

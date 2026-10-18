@@ -198,7 +198,14 @@ static bool AnyRomArchiveExists() {
 }
 
 GameEngine::GameEngine() {
+#ifdef __SWITCH__
+    // Bundled in the NRO (see CMakeLists.txt); a copy on the SD card is the fallback.
+    const std::string assets_path = std::filesystem::exists("romfs:/paperboat.o2r")
+                                        ? std::string("romfs:/paperboat.o2r")
+                                        : Ship::Context::LocateFileAcrossAppDirs("paperboat.o2r");
+#else
     const std::string assets_path = Ship::Context::LocateFileAcrossAppDirs("paperboat.o2r");
+#endif
     portArchiveExists = std::filesystem::exists(assets_path);
 
 #if defined(_WIN32) && defined(_DEBUG)

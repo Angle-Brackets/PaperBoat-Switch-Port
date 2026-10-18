@@ -19,6 +19,7 @@ static int sNxlinkSock = -1;
 // Runs before main() and before static constructors, so the earliest log lines
 // make it across. nxlinkStdio only connects when the NRO was sent by nxlink.
 void userAppInit(void) {
+    romfsInit(); // paperboat.o2r is bundled in the NRO
     if (R_SUCCEEDED(socketInitializeDefault())) {
         sNxlinkSock = nxlinkStdio();
         if (sNxlinkSock >= 0) {
@@ -36,6 +37,7 @@ void userAppExit(void) {
         sNxlinkSock = -1;
     }
     socketExit();
+    romfsExit();
 }
 
 // Bumped by LUS's GL backend each time it compiles a shader program.
