@@ -11,6 +11,8 @@ extern "C" {
 void SwitchDebug_LoopTick(void);
 // Graphics benchmark (SwitchGfxBench.cpp): Start from the menu, Tick once per main-loop iteration.
 void SwitchGfxBench_Start(void);
+// Same, but keeps the resolution and toggles the LUS draw-overhead cuts one at a time.
+void SwitchGfxBench_StartRenderAB(void);
 void SwitchGfxBench_Tick(void);
 int SwitchGfxBench_Running(void);
 // Per-mode (handheld/docked) resolution + MSAA (SwitchGfxProfile.cpp): Init before the window

@@ -439,6 +439,12 @@ void PaperboatMenu::AddMenuSettings() {
         .Options(ButtonOptions().Tooltip(
             "Close the menu and stand somewhere busy: steps through resolution and MSAA settings for "
             "the current mode (~12 s each), logs frame times, then restores your settings."));
+    AddWidget(path, "Run Render A/B Test", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { SwitchGfxBench_StartRenderAB(); })
+        .Options(ButtonOptions().Tooltip(
+            "Developer test: close the menu and stand still somewhere busy. Toggles renderer optimizations "
+            "one at a time (~12 s each, about 80 s total) and logs frame times."));
 #else
     AddWidget(path, "Renderer API (Needs reload)", WIDGET_VIDEO_BACKEND).RaceDisable(false);
 #endif

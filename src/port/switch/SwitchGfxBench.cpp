@@ -1,6 +1,7 @@
 // Switch graphics benchmark: steps through internal resolution x MSAA settings for the current
 // mode (handheld/docked), ~10 s each, and logs GPU/CPU frame times per setting, to choose the
-// Switch defaults. Started from Settings > Graphics; runs once the menu has been closed for 2 s
+// Switch defaults. The render A/B variant instead keeps the resolution and toggles the LUS
+// draw-overhead cuts (stream VBO, uniform cache, same-texture batching) one at a time. Started from Settings > Graphics; runs once the menu has been closed for 2 s
 // and restores the previous settings afterwards. Nothing is saved to the config.
 
 #ifdef __SWITCH__
@@ -29,16 +30,24 @@ extern uint32_t gLusPresentCount;
 extern uint64_t gLusPresentIntervalMicros;
 extern uint64_t gLusPresentIntervalMaxMicros;
 extern uint32_t gLusSlowPresents;
+// LUS draw-overhead cuts (1 = on).
+extern int gLusStreamVbo;
+extern int gLusUniformCache;
+extern int gLusSkipSameBind;
 }
 
 namespace {
 struct Config {
-    float res;
+    float res; // < 0: keep the current resolution and MSAA
     int msaa;
+    int vbo = 1, uniforms = 1, batching = 1;
 };
 constexpr Config kHandheld[] = { { 1.0f, 1 },  { 1.0f, 2 },  { 1.0f, 4 },  { 1.25f, 1 }, { 1.25f, 2 },
                                  { 1.25f, 4 }, { 1.5f, 1 },  { 1.5f, 2 },  { 1.5f, 4 } };
 constexpr Config kDocked[] = { { 0.75f, 1 }, { 0.75f, 2 }, { 1.0f, 1 }, { 1.0f, 2 } };
+// All on, all off, then each alone; the first two again to show drift over the run.
+constexpr Config kRenderAB[] = { { -1, 0, 1, 1, 1 }, { -1, 0, 0, 0, 0 }, { -1, 0, 1, 0, 0 }, { -1, 0, 0, 1, 0 },
+                                 { -1, 0, 0, 0, 1 }, { -1, 0, 1, 1, 1 }, { -1, 0, 0, 0, 0 } };
 
 constexpr u64 kStartDelayNs = 2000000000ULL; // after the menu closes
 constexpr u64 kWarmupNs = 1500000000ULL;     // framebuffer reallocation, texture re-imports
@@ -50,6 +59,8 @@ struct Snapshot {
 };
 
 std::atomic<bool> sRequested { false };
+std::atomic<bool> sRequestedAB { false };
+bool sAB = false;
 int sIndex = -1;
 const Config* sConfigs = nullptr;
 int sConfigCount = 0;
@@ -65,7 +76,15 @@ Snapshot Take() {
              gLusGpuGameMicros, gLusRenderCpuMicros, gLusPresentIntervalMicros };
 }
 
-void Apply(float res, int msaa) {
+void Apply(const Config& config) {
+    gLusStreamVbo = config.vbo;
+    gLusUniformCache = config.uniforms;
+    gLusSkipSameBind = config.batching;
+    if (config.res < 0) {
+        return;
+    }
+    const float res = config.res;
+    const int msaa = config.msaa;
     // The renderer only reads these CVars at init; the window setters apply them live.
     CVarSetFloat(CVAR_INTERNAL_RESOLUTION, res);
     CVarSetInteger(CVAR_MSAA_VALUE, msaa);
@@ -79,10 +98,11 @@ void Report(const Config& config) {
     const uint32_t gpuFrames = end.gpuFrames - sStart.gpuFrames;
     const uint32_t presents = end.presents - sStart.presents;
     auto window = Ship::Context::GetRawInstance()->GetWindow();
-    SPDLOG_INFO("[gfxbench] {} {}x{} res {:.2f} msaa {} | gpu avg {:.2f} ms (game {:.2f}) max {:.2f} | "
+    SPDLOG_INFO("[gfxbench] {} {}x{} res {:.2f} msaa {} vbo {} unif {} batch {} | gpu avg {:.2f} ms (game {:.2f}) max {:.2f} | "
                 "cpu avg {:.2f} max {:.2f} | present avg {:.2f} max {:.2f} ms | {} presents, {} slow",
                 sMode == AppletOperationMode_Console ? "docked" : "handheld", window->GetWidth(),
-                window->GetHeight(), config.res, config.msaa,
+                window->GetHeight(), config.res < 0 ? sSavedRes : config.res, config.res < 0 ? sSavedMsaa : config.msaa,
+                config.vbo, config.uniforms, config.batching,
                 gpuFrames ? (end.gpuMicros - sStart.gpuMicros) / 1000.0 / gpuFrames : 0.0,
                 gpuFrames ? (end.gpuGameMicros - sStart.gpuGameMicros) / 1000.0 / gpuFrames : 0.0,
                 gLusGpuMaxMicros / 1000.0, presents ? (end.cpuMicros - sStart.cpuMicros) / 1000.0 / presents : 0.0,
@@ -92,7 +112,7 @@ void Report(const Config& config) {
 }
 
 void Finish(const char* why) {
-    Apply(sSavedRes, sSavedMsaa);
+    Apply({ sSavedRes, sSavedMsaa });
     sIndex = -1;
     SPDLOG_INFO("[gfxbench] {}; restored res {:.2f} msaa {}", why, sSavedRes, sSavedMsaa);
 }
@@ -103,6 +123,11 @@ extern "C" int SwitchGfxBench_Running(void) {
 }
 
 extern "C" void SwitchGfxBench_Start(void) {
+    sRequested = true;
+}
+
+extern "C" void SwitchGfxBench_StartRenderAB(void) {
+    sRequestedAB = true;
     sRequested = true;
 }
 
@@ -121,15 +146,17 @@ extern "C" void SwitchGfxBench_Tick(void) {
             return;
         }
         sRequested = false;
+        sAB = sRequestedAB.exchange(false);
         sMode = appletGetOperationMode();
         const bool docked = sMode == AppletOperationMode_Console;
-        sConfigs = docked ? kDocked : kHandheld;
-        sConfigCount = docked ? (int) std::size(kDocked) : (int) std::size(kHandheld);
+        sConfigs = sAB ? kRenderAB : docked ? kDocked : kHandheld;
+        sConfigCount = sAB ? (int) std::size(kRenderAB) : docked ? (int) std::size(kDocked) : (int) std::size(kHandheld);
         sSavedRes = CVarGetFloat(CVAR_INTERNAL_RESOLUTION, 1.0f);
         sSavedMsaa = CVarGetInteger(CVAR_MSAA_VALUE, 1);
-        SPDLOG_INFO("[gfxbench] start: {} configs, {} mode", sConfigCount, docked ? "docked" : "handheld");
+        SPDLOG_INFO("[gfxbench] start{}: {} configs, {} mode", sAB ? " render A/B" : "", sConfigCount,
+                    docked ? "docked" : "handheld");
         sIndex = 0;
-        Apply(sConfigs[0].res, sConfigs[0].msaa);
+        Apply(sConfigs[0]);
         sPhaseStart = now;
         sMeasuring = false;
         return;
@@ -152,7 +179,7 @@ extern "C" void SwitchGfxBench_Tick(void) {
     }
     Report(sConfigs[sIndex]);
     if (++sIndex < sConfigCount) {
-        Apply(sConfigs[sIndex].res, sConfigs[sIndex].msaa);
+        Apply(sConfigs[sIndex]);
         sPhaseStart = now;
         sMeasuring = false;
         return;
