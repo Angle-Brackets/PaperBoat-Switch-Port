@@ -23,6 +23,7 @@ void userAppInit(void) {
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
             printf("[switch] nxlink stdio connected\n");
+            fflush(stdout);
         }
     }
 }
@@ -38,6 +39,12 @@ void userAppExit(void) {
 // Bumped by LUS's GL backend each time it compiles a shader program.
 extern uint32_t gLusShaderCompileCount;
 extern uint64_t gLusShaderCompileMicros;
+// std::atomic counters in LUS O2rArchive.cpp; same representation as the plain integers.
+extern volatile uint32_t gLusArchiveLoadCount;
+extern volatile uint64_t gLusArchiveLoadMicros;
+extern volatile uint64_t gLusArchiveLoadBytes;
+extern volatile uint32_t gLusArchiveOpenCount;
+extern volatile uint64_t gLusArchiveOpenMicros;
 
 #define HITCH_THRESHOLD_NS (40ULL * 1000000ULL) // a 60 fps frame is 16.7 ms
 #define STATS_INTERVAL_NS (10ULL * 1000000000ULL)
@@ -51,6 +58,11 @@ static void PrintMemoryStats(const char* tag) {
            "shaders %u (%lu ms total)\n",
            tag, used >> 20, total >> 20, (total - used) >> 20, (unsigned) (mi.uordblks >> 20),
            (unsigned) (mi.arena >> 20), gLusShaderCompileCount, gLusShaderCompileMicros / 1000);
+    printf("[switch] %s io: %u archive loads (%lu KiB, %lu ms), %u zip opens (%lu ms)\n", tag,
+           gLusArchiveLoadCount, gLusArchiveLoadBytes >> 10, gLusArchiveLoadMicros / 1000, gLusArchiveOpenCount,
+           gLusArchiveOpenMicros / 1000);
+    // stdout is block-buffered on the nxlink socket; nothing else flushes it between log lines.
+    fflush(stdout);
 }
 
 // Called once per main-loop iteration. The main thread renders, so a long
@@ -59,6 +71,8 @@ void SwitchDebug_LoopTick(void) {
     static u64 sLastTick = 0, sLastStatsTick = 0;
     static uint32_t sLastShaderCount = 0;
     static uint64_t sLastShaderMicros = 0;
+    static uint32_t sLastLoadCount = 0, sLastOpenCount = 0;
+    static uint64_t sLastLoadMicros = 0, sLastLoadBytes = 0, sLastOpenMicros = 0;
 
     const u64 now = armGetSystemTick();
     if (sLastTick == 0) {
@@ -69,11 +83,22 @@ void SwitchDebug_LoopTick(void) {
 
     const u64 elapsedNs = armTicksToNs(now - sLastTick);
     if (elapsedNs > HITCH_THRESHOLD_NS) {
-        printf("[switch] hitch: %lu ms, +%u shaders compiled (%lu ms)\n", elapsedNs / 1000000,
-               gLusShaderCompileCount - sLastShaderCount, (gLusShaderCompileMicros - sLastShaderMicros) / 1000);
+        // Archive loads can run on other threads; their time is reported, not assumed to be on this one.
+        printf("[switch] hitch: %lu ms | shaders +%u (%lu ms) | archive loads +%u (%lu KiB, %lu ms) | zip opens +%u "
+               "(%lu ms)\n",
+               elapsedNs / 1000000, gLusShaderCompileCount - sLastShaderCount,
+               (gLusShaderCompileMicros - sLastShaderMicros) / 1000, gLusArchiveLoadCount - sLastLoadCount,
+               (gLusArchiveLoadBytes - sLastLoadBytes) >> 10, (gLusArchiveLoadMicros - sLastLoadMicros) / 1000,
+               gLusArchiveOpenCount - sLastOpenCount, (gLusArchiveOpenMicros - sLastOpenMicros) / 1000);
+        fflush(stdout);
     }
     sLastShaderCount = gLusShaderCompileCount;
     sLastShaderMicros = gLusShaderCompileMicros;
+    sLastLoadCount = gLusArchiveLoadCount;
+    sLastLoadMicros = gLusArchiveLoadMicros;
+    sLastLoadBytes = gLusArchiveLoadBytes;
+    sLastOpenCount = gLusArchiveOpenCount;
+    sLastOpenMicros = gLusArchiveOpenMicros;
     sLastTick = now;
 
     if (armTicksToNs(now - sLastStatsTick) > STATS_INTERVAL_NS) {
