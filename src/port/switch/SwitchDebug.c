@@ -50,6 +50,16 @@ extern volatile uint64_t gLusArchiveLoadMicros;
 extern volatile uint64_t gLusArchiveLoadBytes;
 extern volatile uint32_t gLusArchiveOpenCount;
 extern volatile uint64_t gLusArchiveOpenMicros;
+// LUS interpreter.cpp: render-thread texture import (decode + upload) time.
+extern uint32_t gLusTexImportCount;
+extern uint64_t gLusTexImportMicros;
+// LUS gfx_sdl2.cpp: presents, frame-pacer sleep and SDL_GL_SwapWindow (vsync) time.
+extern uint32_t gLusPresentCount;
+extern uint64_t gLusPaceMicros;
+extern uint64_t gLusSwapMicros;
+extern uint64_t gLusSwapMaxMicros;
+
+uint64_t gSwitchLoopPhaseMicros[2];
 
 #define HITCH_THRESHOLD_NS (40ULL * 1000000ULL) // a 60 fps frame is 16.7 ms
 #define STATS_INTERVAL_NS (10ULL * 1000000000ULL)
@@ -68,16 +78,20 @@ static void MonitorLog(const char* fmt, ...) {
     SwitchDebug_Log(buf);
 }
 
-static void PrintMemoryStats(const char* tag) {
+// withMalloc: mallinfo() walks the whole heap under the malloc lock (~40 ms), stalling every thread
+// that allocates, so the periodic report leaves it out.
+static void PrintMemoryStats(const char* tag, bool withMalloc) {
     u64 total = 0, used = 0;
     svcGetInfo(&total, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
     svcGetInfo(&used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
-    struct mallinfo mi = mallinfo();
-    MonitorLog("%s mem: used %lu / %lu MiB (%lu MiB free), malloc in use %u MiB, heap arena %u MiB, "
-           "shaders inline %u (%lu ms), background %u, draws skipped %u",
-           tag, used >> 20, total >> 20, (total - used) >> 20, (unsigned) (mi.uordblks >> 20),
-           (unsigned) (mi.arena >> 20), gLusShaderCompileCount, gLusShaderCompileMicros / 1000,
-           gLusShaderAsyncCompiled, gLusShaderAsyncSkippedDraws);
+    if (withMalloc) {
+        struct mallinfo mi = mallinfo();
+        MonitorLog("%s mem: used %lu / %lu MiB (%lu MiB free), malloc in use %u MiB, heap arena %u MiB", tag,
+                   used >> 20, total >> 20, (total - used) >> 20, (unsigned) (mi.uordblks >> 20),
+                   (unsigned) (mi.arena >> 20));
+    }
+    MonitorLog("%s shaders: inline %u (%lu ms), background %u, draws skipped %u", tag, gLusShaderCompileCount,
+               gLusShaderCompileMicros / 1000, gLusShaderAsyncCompiled, gLusShaderAsyncSkippedDraws);
     MonitorLog("%s io: %u archive loads (%lu KiB, %lu ms), %u zip opens (%lu ms)", tag,
            gLusArchiveLoadCount, gLusArchiveLoadBytes >> 10, gLusArchiveLoadMicros / 1000, gLusArchiveOpenCount,
            gLusArchiveOpenMicros / 1000);
@@ -96,8 +110,19 @@ void SwitchDebug_MemCheckpoint(const char* label) {
 
 // Called once per main-loop iteration. The main thread renders, so a long
 // iteration is a visible hitch; shader compiles inside it are reported with it.
+static u64 ThreadCpuTicks(void) {
+    u64 ticks = 0;
+    // Pseudo-handle for the calling thread; 13.0.0+ id, with the 1.0.0-12.1.0 one as fallback.
+    if (R_FAILED(svcGetInfo(&ticks, InfoType_ThreadTickCount, 0xFFFF8000, UINT64_MAX))) {
+        svcGetInfo(&ticks, InfoType_ThreadTickCountDeprecated, 0xFFFF8000, UINT64_MAX);
+    }
+    return ticks;
+}
+
 void SwitchDebug_LoopTick(void) {
-    static u64 sLastTick = 0, sLastStatsTick = 0;
+    static u64 sLastTick = 0, sLastStatsTick = 0, sLastCpu = 0;
+    static uint32_t sLastTexCount = 0, sLastPresents = 0;
+    static uint64_t sLastTexMicros = 0, sLastPaceMicros = 0, sLastSwapMicros = 0;
     static uint32_t sLastShaderCount = 0;
     static uint64_t sLastShaderMicros = 0;
     static uint32_t sLastLoadCount = 0, sLastOpenCount = 0, sLastAsync = 0;
@@ -106,12 +131,22 @@ void SwitchDebug_LoopTick(void) {
     const u64 now = armGetSystemTick();
     if (sLastTick == 0) {
         sLastTick = sLastStatsTick = now;
-        PrintMemoryStats("start");
+        sLastCpu = ThreadCpuTicks();
+        PrintMemoryStats("start", true);
         return;
     }
 
     const u64 elapsedNs = armTicksToNs(now - sLastTick);
+    const u64 cpu = ThreadCpuTicks();
     if (elapsedNs > HITCH_THRESHOLD_NS) {
+        // cpu < wall - pace - swap means this thread was runnable but another thread had its core.
+        MonitorLog("hitch: %lu ms | cpu %lu ms | presents +%u, pace %lu ms, swap %lu ms (max %lu ms) | "
+                   "tex imports +%u (%lu ms) | phases frame %lu ms, rcp %lu ms",
+                   elapsedNs / 1000000, armTicksToNs(cpu - sLastCpu) / 1000000, gLusPresentCount - sLastPresents,
+                   (gLusPaceMicros - sLastPaceMicros) / 1000, (gLusSwapMicros - sLastSwapMicros) / 1000,
+                   gLusSwapMaxMicros / 1000, gLusTexImportCount - sLastTexCount,
+                   (gLusTexImportMicros - sLastTexMicros) / 1000, gSwitchLoopPhaseMicros[0] / 1000,
+                   gSwitchLoopPhaseMicros[1] / 1000);
         // Archive loads can run on other threads; their time is reported, not assumed to be on this one.
         MonitorLog("hitch: %lu ms | shaders +%u (%lu ms), background +%u | archive loads +%u (%lu KiB, %lu ms) | "
                "zip opens +%u (%lu ms)",
@@ -129,12 +164,21 @@ void SwitchDebug_LoopTick(void) {
     sLastLoadBytes = gLusArchiveLoadBytes;
     sLastOpenCount = gLusArchiveOpenCount;
     sLastOpenMicros = gLusArchiveOpenMicros;
-    sLastTick = now;
+    sLastTexCount = gLusTexImportCount;
+    sLastTexMicros = gLusTexImportMicros;
+    sLastPresents = gLusPresentCount;
+    sLastPaceMicros = gLusPaceMicros;
+    sLastSwapMicros = gLusSwapMicros;
+    gLusSwapMaxMicros = 0;
+    gSwitchLoopPhaseMicros[0] = gSwitchLoopPhaseMicros[1] = 0;
 
     if (armTicksToNs(now - sLastStatsTick) > STATS_INTERVAL_NS) {
         sLastStatsTick = now;
-        PrintMemoryStats("periodic");
+        PrintMemoryStats("periodic", false);
     }
+    // Taken after the report so its own logging isn't measured as the next iteration's hitch.
+    sLastTick = armGetSystemTick();
+    sLastCpu = ThreadCpuTicks();
 }
 
 alignas(16) u8 __nx_exception_stack[0x8000];

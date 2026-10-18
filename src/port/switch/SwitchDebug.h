@@ -9,6 +9,9 @@ extern "C" {
 void SwitchDebug_LoopTick(void);
 // Logs malloc usage and the delta since the previous checkpoint, to attribute startup memory.
 void SwitchDebug_MemCheckpoint(const char* label);
+// Main-loop time per phase, accumulated by Game.cpp and reported with each hitch:
+// [0] StartFrame + input + render service, [1] ServiceRcp (draw + present).
+extern uint64_t gSwitchLoopPhaseMicros[2];
 #ifdef __cplusplus
 }
 #endif

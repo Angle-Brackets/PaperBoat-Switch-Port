@@ -160,10 +160,27 @@ extern "C"
 #ifdef __SWITCH__
         SwitchDebug_LoopTick();
 #endif
+#ifdef __SWITCH__
+        // Phase times for the hitch monitor: [0] StartFrame+input+render service, [1] ServiceRcp.
+        auto phaseStart = std::chrono::steady_clock::now();
+        auto phaseEnd = [&phaseStart](int phase) {
+            const auto now = std::chrono::steady_clock::now();
+            gSwitchLoopPhaseMicros[phase] +=
+                std::chrono::duration_cast<std::chrono::microseconds>(now - phaseStart).count();
+            phaseStart = now;
+        };
+#define SWITCH_PHASE_END(i) phaseEnd(i)
+#else
+#define SWITCH_PHASE_END(i)
+#endif
         GameEngine::Instance->StartFrame();
         OS_SiService();
         GameEngine::DrainRenderService();
-        if (!ServiceRcp()) {
+        SWITCH_PHASE_END(0);
+        const bool ranTask = ServiceRcp();
+        SWITCH_PHASE_END(1);
+#undef SWITCH_PHASE_END
+        if (!ranTask) {
             if (ThreadWatchdog_IsStalled(WATCHDOG_GAME_TICK)) {
                 GameEngine::Instance->RenderGuiFrame();
                 SDL_Delay(16);
