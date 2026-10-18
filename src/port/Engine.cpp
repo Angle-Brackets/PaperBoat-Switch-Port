@@ -24,6 +24,11 @@
 #include <cstring>
 #include <unistd.h>
 #endif
+#ifdef __SWITCH__
+// From libnx <switch/runtime/env.h>; <switch.h> itself clashes with ultratypes' u64.
+extern "C" bool envHasNextLoad(void);
+extern "C" uint32_t envSetNextLoad(const char* path, const char* argv);
+#endif
 #include <BS_thread_pool.hpp>
 #include <algorithm>
 #include <atomic>
@@ -877,6 +882,13 @@ void GameEngine::RelaunchIfRequested(int argc, char* argv[]) {
 #elif (defined(__linux__) || defined(__APPLE__)) && !defined(__ANDROID__)
     execv(argv[0], argv);
     SPDLOG_ERROR("Relaunch failed: execv error {}", strerror(errno));
+#elif defined(__SWITCH__)
+    // No exec on Horizon: ask hbloader to chain-load this NRO once we return from main.
+    if (argc > 0 && envHasNextLoad()) {
+        envSetNextLoad(argv[0], argv[0]);
+    } else {
+        SPDLOG_ERROR("Relaunch failed: loader does not support chain-loading");
+    }
 #endif
 }
 
