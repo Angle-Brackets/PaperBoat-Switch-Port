@@ -22,7 +22,12 @@ int32_t osContInit(OSMesgQueue* mq, uint8_t* controllerBits, OSContStatus* statu
     // The SDL game-controller subsystem and mappings are brought up earlier, in
     // Context::InitControlDeck, so controllers work in pre-game UI. ControlDeck::Init
     // stays here as it needs the game's controllerBits.
-    Ship::Context::GetRawInstance()->GetControlDeck()->Init(controllerBits);
+    auto controlDeck = Ship::Context::GetRawInstance()->GetControlDeck();
+    // Gamepads are otherwise only opened once the add-device handler drains
+    // SDL_CONTROLLERDEVICEADDED; open the ones already attached (Joy-Cons on a
+    // cold boot) before the first SI read. Runs on the event-pumping main thread.
+    controlDeck->GetConnectedPhysicalDeviceManager()->RefreshConnectedSDLGamepads();
+    controlDeck->Init(controllerBits);
 
     return 0;
 }
