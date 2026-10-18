@@ -78,6 +78,8 @@ extern uint64_t gLusUniformMicros;
 extern uint64_t gLusVboMicros;
 extern uint64_t gLusVboMaxMicros;
 extern uint64_t gLusDrawMaxMicros;
+extern uint32_t gLusTriFast;     // triangles that took the GfxSpTri1 fast path
+extern uint32_t gLusTriFastMiss; // verify mode: fast-path candidates whose setup changed something
 extern uint32_t gLusDraws;
 extern uint32_t gLusTris;
 extern uint32_t gLusOps;
@@ -93,6 +95,7 @@ static void PrintFrameStats(const char* tag) {
     static uint32_t sFrames, sDropped, sPresents, sSlow;
     static uint64_t sGpu, sGpuGame, sCpu;
     static uint64_t sRun, sDraw, sUnif, sVbo;
+    static uint32_t sTriFast, sTriFastMiss;
     static uint32_t sDraws, sTris, sOps, sTexImports, sTexMiss, sTexSame, sPal, sPrg, sWhy[8];
     const uint32_t frames = gLusGpuFrames - sFrames, presents = gLusPresentCount - sPresents;
     if (frames && presents) {
@@ -111,20 +114,23 @@ static void PrintFrameStats(const char* tag) {
             why[i] = (gLusFlushWhy[i] - sWhy[i]) / p;
         }
         MonitorLog("%s draw: run %.2f ms (gl %.2f: unif %.2f vbo %.2f; max draw %.1f vbo %.1f) | %.0f draws %.0f tris %.0f ops | "
-                   "tex %.1f binds %.1f miss %.1f same | pal %.1f prg %.1f | why tex %.1f cc %.1f prg %.1f "
+                   "tex %.1f binds %.1f miss %.1f same | pal %.1f prg %.1f | fast %.0f miss %u | why tex %.1f cc %.1f prg %.1f "
                    "unif %.1f mtx %.1f light %.1f pal %.1f other %.1f",
                    tag, (gLusRunMicros - sRun) / 1000.0 / p, (gLusDrawMicros - sDraw) / 1000.0 / p,
                    (gLusUniformMicros - sUnif) / 1000.0 / p, (gLusVboMicros - sVbo) / 1000.0 / p,
                    gLusDrawMaxMicros / 1000.0, gLusVboMaxMicros / 1000.0,
                    (gLusDraws - sDraws) / p, (gLusTris - sTris) / p, (gLusOps - sOps) / p,
                    (gLusTexImportCount - sTexImports) / p, (gLusTexMiss - sTexMiss) / p,
-                   (gLusTexSame - sTexSame) / p, (gLusPalUploads - sPal) / p, (gLusPrgSwitch - sPrg) / p, why[0],
+                   (gLusTexSame - sTexSame) / p, (gLusPalUploads - sPal) / p, (gLusPrgSwitch - sPrg) / p,
+                   (gLusTriFast - sTriFast) / p, gLusTriFastMiss - sTriFastMiss, why[0],
                    why[1], why[2], why[3], why[4], why[5], why[6], why[7]);
     }
     sRun = gLusRunMicros;
     sDraw = gLusDrawMicros;
     sUnif = gLusUniformMicros;
     sVbo = gLusVboMicros;
+    sTriFast = gLusTriFast;
+    sTriFastMiss = gLusTriFastMiss;
     gLusDrawMaxMicros = 0;
     gLusVboMaxMicros = 0;
     sDraws = gLusDraws;

@@ -34,20 +34,23 @@ extern uint32_t gLusSlowPresents;
 extern int gLusStreamVbo;
 extern int gLusUniformCache;
 extern int gLusSkipSameBind;
+extern int gLusTriFastPath;
 }
 
 namespace {
 struct Config {
     float res; // < 0: keep the current resolution and MSAA
     int msaa;
-    int vbo = 1, uniforms = 1, batching = 1;
+    int vbo = 1, uniforms = 1, batching = 1, fastTri = 1;
 };
 constexpr Config kHandheld[] = { { 1.0f, 1 },  { 1.0f, 2 },  { 1.0f, 4 },  { 1.25f, 1 }, { 1.25f, 2 },
                                  { 1.25f, 4 }, { 1.5f, 1 },  { 1.5f, 2 },  { 1.5f, 4 } };
 constexpr Config kDocked[] = { { 0.75f, 1 }, { 0.75f, 2 }, { 1.0f, 1 }, { 1.0f, 2 } };
-// All on, all off, then each alone; the first two again to show drift over the run.
-constexpr Config kRenderAB[] = { { -1, 0, 1, 1, 1 }, { -1, 0, 0, 0, 0 }, { -1, 0, 1, 0, 0 }, { -1, 0, 0, 1, 0 },
-                                 { -1, 0, 0, 0, 1 }, { -1, 0, 1, 1, 1 }, { -1, 0, 0, 0, 0 } };
+// All on, all off, then the triangle fast path off / verify / on with the rest on, then all on and off
+// again to show drift over the run.
+constexpr Config kRenderAB[] = { { -1, 0, 1, 1, 1, 1 }, { -1, 0, 0, 0, 0, 0 }, { -1, 0, 1, 1, 1, 0 },
+                                 { -1, 0, 1, 1, 1, 2 }, { -1, 0, 1, 1, 1, 1 }, { -1, 0, 1, 1, 1, 0 },
+                                 { -1, 0, 0, 0, 0, 0 } };
 
 constexpr u64 kStartDelayNs = 2000000000ULL; // after the menu closes
 constexpr u64 kWarmupNs = 1500000000ULL;     // framebuffer reallocation, texture re-imports
@@ -80,6 +83,7 @@ void Apply(const Config& config) {
     gLusStreamVbo = config.vbo;
     gLusUniformCache = config.uniforms;
     gLusSkipSameBind = config.batching;
+    gLusTriFastPath = config.fastTri;
     if (config.res < 0) {
         return;
     }
@@ -98,11 +102,11 @@ void Report(const Config& config) {
     const uint32_t gpuFrames = end.gpuFrames - sStart.gpuFrames;
     const uint32_t presents = end.presents - sStart.presents;
     auto window = Ship::Context::GetRawInstance()->GetWindow();
-    SPDLOG_INFO("[gfxbench] {} {}x{} res {:.2f} msaa {} vbo {} unif {} batch {} | gpu avg {:.2f} ms (game {:.2f}) max {:.2f} | "
+    SPDLOG_INFO("[gfxbench] {} {}x{} res {:.2f} msaa {} vbo {} unif {} batch {} fasttri {} | gpu avg {:.2f} ms (game {:.2f}) max {:.2f} | "
                 "cpu avg {:.2f} max {:.2f} | present avg {:.2f} max {:.2f} ms | {} presents, {} slow",
                 sMode == AppletOperationMode_Console ? "docked" : "handheld", window->GetWidth(),
                 window->GetHeight(), config.res < 0 ? sSavedRes : config.res, config.res < 0 ? sSavedMsaa : config.msaa,
-                config.vbo, config.uniforms, config.batching,
+                config.vbo, config.uniforms, config.batching, config.fastTri,
                 gpuFrames ? (end.gpuMicros - sStart.gpuMicros) / 1000.0 / gpuFrames : 0.0,
                 gpuFrames ? (end.gpuGameMicros - sStart.gpuGameMicros) / 1000.0 / gpuFrames : 0.0,
                 gLusGpuMaxMicros / 1000.0, presents ? (end.cpuMicros - sStart.cpuMicros) / 1000.0 / presents : 0.0,

@@ -60,6 +60,12 @@ void PaperboatMenu::AddMenuSwitch() {
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
             "Doesn't split a draw when a texture is re-selected but hasn't changed."));
+    AddWidget(path, "Skip Repeated Triangle Setup", WIDGET_CVAR_CHECKBOX)
+        .CVar(SWITCH_TWEAK_TRI_FAST_PATH)
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Reuses the previous triangle's draw setup when nothing changed in between, instead of "
+            "rebuilding it for every triangle. Turn off if something draws with the wrong colors or textures."));
 
     AddSidebarEntry("Switch", "Benchmarks", 1);
     path = { "Switch", "Benchmarks", SECTION_COLUMN_1 };
