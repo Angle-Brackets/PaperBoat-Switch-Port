@@ -51,6 +51,7 @@ void port_palette_tint(PAL_PTR palette, PAL_PTR base, f32 sr, f32 sg, f32 sb, s3
 // Sprite HD prefetch (SpritePatches.c)
 struct SpriteAnimData;
 void port_prefetch_npc_anim(struct SpriteAnimData* sprite, s32 prevAnimID, s32 animID);
+void port_prefetch_npc_sprite(struct SpriteAnimData* sprite);
 void port_prefetch_player_anim(struct SpriteAnimData* sprite, s32 prevAnimID, s32 animID);
 
 // Message fonts (MessagePatches.c)

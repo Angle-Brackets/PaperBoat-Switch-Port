@@ -112,9 +112,9 @@ void state_step_battle(void) {
     }
 
     // PORT: hold the screen black (frames undrawn, so queued shaders compile back to back) until the
-    // battle area's shaders are built. Nothing battle-side has started yet, as in the delay above.
+    // battle area's shaders are built and its textures loaded. Nothing battle-side has started yet, as in the delay above.
     if (BattleAwaitShaders) {
-        if (port_shaderPrewarmBusy()) {
+        if (port_shaderPrewarmBusy() || port_texturePrefetchBusy()) {
             return;
         }
         BattleAwaitShaders = false;

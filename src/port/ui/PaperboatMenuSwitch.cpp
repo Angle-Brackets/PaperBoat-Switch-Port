@@ -29,6 +29,12 @@ void PaperboatMenu::AddMenuSwitch() {
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
             "Waits for the first (slow) frames of a new map or battle to pass before fading in, so the "
             "fade plays smoothly instead of popping. Capped at 2 seconds."));
+    AddWidget(path, "Preload Textures", WIDGET_CVAR_CHECKBOX)
+        .CVar(SWITCH_TWEAK_PRELOAD_TEXTURES)
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Reads a new area's textures and characters' sprites from the SD card during the black screen, "
+            "instead of when they first appear (which hitches). Capped at 3 extra seconds."));
     AddWidget(path, "Predict Next Area's Shaders", WIDGET_CVAR_CHECKBOX)
         .CVar(SWITCH_TWEAK_BACKGROUND_SHADERS)
         .RaceDisable(false)

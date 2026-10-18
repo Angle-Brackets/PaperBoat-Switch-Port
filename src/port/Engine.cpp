@@ -1533,12 +1533,66 @@ extern "C" void GameEngine_LogStackTrace(const char* label) {
 #endif
 }
 
+// Vanilla texture prefetch: loads queued by GameEngine_PrefetchTexture that haven't landed yet. The
+// render thread otherwise reads each texture's file the first time it draws it, blocking on the pool.
+static std::mutex sTexPrefetchMutex;
+static std::vector<std::shared_future<std::shared_ptr<Ship::IResource>>> sTexPrefetchPending;
+
+static bool TexturePrefetchEnabled() {
+#ifdef __SWITCH__
+    return SwitchTweak_Enabled(SWITCH_TWEAK_PRELOAD_TEXTURES);
+#else
+    return true;
+#endif
+}
+
 extern "C" void GameEngine_PrefetchTexture(const char* path) {
-    if (path != nullptr && GameEngine_OTRSigCheck(path) && gsFast3dWindow != nullptr) {
+    if (path == nullptr || !GameEngine_OTRSigCheck(path)) {
+        return;
+    }
+    if (TexturePrefetchEnabled()) {
+        // The same cache key the draw uses (exact, signature stripped). Low priority: under the render
+        // thread's own misses (highest), over HD decodes (lowest).
+        auto future = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResourceAsync(
+            std::string(path + 7), true, BS::pr::low);
+        if (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            std::lock_guard<std::mutex> lock(sTexPrefetchMutex);
+            sTexPrefetchPending.push_back(std::move(future));
+        }
+    }
+    if (gsFast3dWindow != nullptr) {
         if (auto interpreter = gsFast3dWindow->GetInterpreterWeak().lock()) {
             interpreter->PrefetchReplacement(path + 7); // past "__OTR__"
         }
     }
+}
+
+extern "C" int port_texturePrefetchBusy(void) {
+    // A cap like the shader hold's, so a slow card can't hold a load forever.
+    constexpr auto kMaxHold = std::chrono::seconds(3);
+    static bool sHolding = false;
+    static std::chrono::steady_clock::time_point sHoldStart;
+    {
+        std::lock_guard<std::mutex> lock(sTexPrefetchMutex);
+        std::erase_if(sTexPrefetchPending, [](const auto& f) {
+            return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        });
+        if (sTexPrefetchPending.empty()) {
+            if (sHolding) {
+                SPDLOG_INFO("[textures] preload held the load screen {} ms",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - sHoldStart).count());
+            }
+            sHolding = false;
+            return 0;
+        }
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!sHolding) {
+        sHolding = true;
+        sHoldStart = now;
+    }
+    return now - sHoldStart < kMaxHold;
 }
 
 extern "C" void GameEngine_InvalidateTextureCache(const void* addr) {

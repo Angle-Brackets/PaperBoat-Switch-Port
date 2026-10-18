@@ -205,6 +205,16 @@ static void PrefetchAnim(SpriteAnimData* sprite, s32 animIndex, s32 playerSprite
     }
 }
 
+// A freshly loaded NPC sprite: queue all its rasters, so animations it switches to later don't read
+// their files mid-scene.
+void port_prefetch_npc_sprite(SpriteAnimData* sprite) {
+    SpriteRasterCacheEntry** rasters = sprite->rastersOffset;
+    while (rasters != NULL && *rasters != PTR_LIST_END) {
+        GameEngine_PrefetchTexture((const char*) (*rasters)->image);
+        rasters++;
+    }
+}
+
 void port_prefetch_npc_anim(SpriteAnimData* sprite, s32 prevAnimID, s32 animID) {
     if (SPR_UNPACK_ANIM(prevAnimID) != SPR_UNPACK_ANIM(animID)) {
         PrefetchAnim(sprite, SPR_UNPACK_ANIM(animID), -1);

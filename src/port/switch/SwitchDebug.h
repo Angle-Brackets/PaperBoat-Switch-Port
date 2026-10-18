@@ -30,6 +30,7 @@ const char* SwitchGfxProfile_ModeName(void);
 #define SWITCH_TWEAK_SKIP_SAME_BIND "gSwitch.Tweaks.SkipSameBind"
 #define SWITCH_TWEAK_THREAD_PINNING "gSwitch.Tweaks.ThreadPinning"
 #define SWITCH_TWEAK_TRI_FAST_PATH "gSwitch.Tweaks.TriFastPath"
+#define SWITCH_TWEAK_PRELOAD_TEXTURES "gSwitch.Tweaks.PreloadTextures"
 int SwitchTweak_Enabled(const char* cvar);
 void SwitchTweaks_Tick(void);
 // Logs malloc usage and the delta since the previous checkpoint, to attribute startup memory.

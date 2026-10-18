@@ -243,6 +243,10 @@ static void port_load_one_texture(const char* archive, const MapTexMeta* meta, s
         auxPalette = NULL;
     }
 
+    // Palettes too: they're files the first draw would otherwise read.
+    GameEngine_PrefetchTexture((const char*) palette);
+    GameEngine_PrefetchTexture((const char*) auxPalette);
+
     handle->raster = raster;
     handle->palette = palette;
     handle->auxRaster = auxRaster;
