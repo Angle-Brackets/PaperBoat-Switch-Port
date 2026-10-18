@@ -49,20 +49,31 @@ extern volatile uint64_t gLusArchiveOpenMicros;
 #define HITCH_THRESHOLD_NS (40ULL * 1000000ULL) // a 60 fps frame is 16.7 ms
 #define STATS_INTERVAL_NS (10ULL * 1000000000ULL)
 
+// spdlog sink (port/Game.cpp): reaches both nxlink and logs/Paperboat.log.
+void SwitchDebug_Log(const char* msg);
+
+static void MonitorLog(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+static void MonitorLog(const char* fmt, ...) {
+    char buf[384];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    SwitchDebug_Log(buf);
+}
+
 static void PrintMemoryStats(const char* tag) {
     u64 total = 0, used = 0;
     svcGetInfo(&total, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
     svcGetInfo(&used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
     struct mallinfo mi = mallinfo();
-    printf("[switch] %s mem: used %lu / %lu MiB (%lu MiB free), malloc in use %u MiB, heap arena %u MiB, "
-           "shaders %u (%lu ms total)\n",
+    MonitorLog("%s mem: used %lu / %lu MiB (%lu MiB free), malloc in use %u MiB, heap arena %u MiB, "
+           "shaders %u (%lu ms total)",
            tag, used >> 20, total >> 20, (total - used) >> 20, (unsigned) (mi.uordblks >> 20),
            (unsigned) (mi.arena >> 20), gLusShaderCompileCount, gLusShaderCompileMicros / 1000);
-    printf("[switch] %s io: %u archive loads (%lu KiB, %lu ms), %u zip opens (%lu ms)\n", tag,
+    MonitorLog("%s io: %u archive loads (%lu KiB, %lu ms), %u zip opens (%lu ms)", tag,
            gLusArchiveLoadCount, gLusArchiveLoadBytes >> 10, gLusArchiveLoadMicros / 1000, gLusArchiveOpenCount,
            gLusArchiveOpenMicros / 1000);
-    // stdout is block-buffered on the nxlink socket; nothing else flushes it between log lines.
-    fflush(stdout);
 }
 
 // Called once per main-loop iteration. The main thread renders, so a long
@@ -84,13 +95,12 @@ void SwitchDebug_LoopTick(void) {
     const u64 elapsedNs = armTicksToNs(now - sLastTick);
     if (elapsedNs > HITCH_THRESHOLD_NS) {
         // Archive loads can run on other threads; their time is reported, not assumed to be on this one.
-        printf("[switch] hitch: %lu ms | shaders +%u (%lu ms) | archive loads +%u (%lu KiB, %lu ms) | zip opens +%u "
-               "(%lu ms)\n",
+        MonitorLog("hitch: %lu ms | shaders +%u (%lu ms) | archive loads +%u (%lu KiB, %lu ms) | zip opens +%u "
+               "(%lu ms)",
                elapsedNs / 1000000, gLusShaderCompileCount - sLastShaderCount,
                (gLusShaderCompileMicros - sLastShaderMicros) / 1000, gLusArchiveLoadCount - sLastLoadCount,
                (gLusArchiveLoadBytes - sLastLoadBytes) >> 10, (gLusArchiveLoadMicros - sLastLoadMicros) / 1000,
                gLusArchiveOpenCount - sLastOpenCount, (gLusArchiveOpenMicros - sLastOpenMicros) / 1000);
-        fflush(stdout);
     }
     sLastShaderCount = gLusShaderCompileCount;
     sLastShaderMicros = gLusShaderCompileMicros;

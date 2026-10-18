@@ -17,6 +17,9 @@
 #endif
 #ifdef __SWITCH__
 extern "C" void SwitchDebug_LoopTick(void); // port/switch/SwitchDebug.c
+extern "C" void SwitchDebug_Log(const char* msg) {
+    SPDLOG_INFO("[switch] {}", msg);
+}
 #endif
 #ifdef __ANDROID__
 // Redefines main() to SDL_main(), which SDLActivity calls into. The game data
