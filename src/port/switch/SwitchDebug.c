@@ -39,6 +39,7 @@ void userAppExit(void) {
 // Bumped by LUS's GL backend each time it compiles a shader program.
 extern uint32_t gLusShaderCompileCount;
 extern uint64_t gLusShaderCompileMicros;
+extern uint32_t gLusShaderCacheHits; // programs loaded from shadercache/ instead of compiled
 // std::atomic counters in LUS O2rArchive.cpp; same representation as the plain integers.
 extern volatile uint32_t gLusArchiveLoadCount;
 extern volatile uint64_t gLusArchiveLoadMicros;
@@ -68,9 +69,9 @@ static void PrintMemoryStats(const char* tag) {
     svcGetInfo(&used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
     struct mallinfo mi = mallinfo();
     MonitorLog("%s mem: used %lu / %lu MiB (%lu MiB free), malloc in use %u MiB, heap arena %u MiB, "
-           "shaders %u (%lu ms total)",
+           "shaders compiled %u (%lu ms total), from cache %u",
            tag, used >> 20, total >> 20, (total - used) >> 20, (unsigned) (mi.uordblks >> 20),
-           (unsigned) (mi.arena >> 20), gLusShaderCompileCount, gLusShaderCompileMicros / 1000);
+           (unsigned) (mi.arena >> 20), gLusShaderCompileCount, gLusShaderCompileMicros / 1000, gLusShaderCacheHits);
     MonitorLog("%s io: %u archive loads (%lu KiB, %lu ms), %u zip opens (%lu ms)", tag,
            gLusArchiveLoadCount, gLusArchiveLoadBytes >> 10, gLusArchiveLoadMicros / 1000, gLusArchiveOpenCount,
            gLusArchiveOpenMicros / 1000);
