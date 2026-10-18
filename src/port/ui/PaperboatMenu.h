@@ -23,6 +23,7 @@ class PaperboatMenu : public Ship::Menu {
     void AddMenuEnhancements();
     void AddMenuShaderSettings();
     void AddMenuDevTools();
+    void AddMenuSwitch();
 
   private:
     char mGitCommitHashTruncated[8];

@@ -13,6 +13,7 @@
 #include <SDL2/SDL_thread.h>
 #ifdef __SWITCH__
 #include <spdlog/spdlog.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 // libnx's switch.h clashes with libultra's u64/s64 typedefs (OS.h); just the one syscall.
 extern "C" uint32_t svcSetThreadCoreMask(uint32_t handle, int32_t preferred_core, uint32_t affinity_mask);
 constexpr uint32_t kCurThreadHandle = 0xFFFF8000; // CUR_THREAD_HANDLE
@@ -68,6 +69,10 @@ extern "C" void OS_SetThreadEntryCore(void* entry, int core) {
 
 extern "C" void OS_PinCurrentThread(int core, const char* name) {
 #ifdef __SWITCH__
+    // Read when each thread starts, so a change applies from the next launch.
+    if (CVarGetInteger("gSwitch.Tweaks.ThreadPinning", 1) == 0) {
+        return;
+    }
     const uint32_t rc = svcSetThreadCoreMask(kCurThreadHandle, core, 1u << core);
     if (rc != 0) {
         SPDLOG_WARN("[switch] {} thread: core {} pin failed, rc={:#x}", name, core, rc);

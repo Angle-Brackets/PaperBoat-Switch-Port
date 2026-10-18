@@ -1148,6 +1148,11 @@ extern "C" int port_renderSettled(void) {
     static int64_t sWaitStartMs = 0, sLastCallMs = 0;
     static uint32_t sWaitStartFrames = 0;
 
+#ifdef __SWITCH__
+    if (!SwitchTweak_Enabled(SWITCH_TWEAK_SMOOTH_FADE)) {
+        return 1;
+    }
+#endif
     const int64_t now = SteadyMs();
     if (now - sLastCallMs > 200) { // not called last frame: a new fade-in
         sWaitStartMs = now;

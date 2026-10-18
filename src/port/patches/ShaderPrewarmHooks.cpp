@@ -11,6 +11,7 @@
 #include "port/Engine.h"
 #include "port/hooks/Events.h"
 #include "port/ShipInit.hpp"
+#include "port/switch/SwitchDebug.h"
 
 #include "common.h"
 #include "filemenu.h"
@@ -111,6 +112,11 @@ extern "C" int port_shaderPrewarmBusy(void) {
     constexpr auto kMaxHold = std::chrono::seconds(8);
     static bool sHolding = false;
     static std::chrono::steady_clock::time_point sHoldStart;
+#ifdef __SWITCH__
+    if (!SwitchTweak_Enabled(SWITCH_TWEAK_HOLD_SHADERS)) {
+        return 0;
+    }
+#endif
     if (!Fast::ShaderPrewarm::Busy()) {
         sHolding = false;
         return 0;
@@ -125,6 +131,11 @@ extern "C" int port_shaderPrewarmBusy(void) {
 
 // Reads game-thread state from the main thread without locking; it only steers a hint.
 extern "C" int port_shaderPrewarmBackground(int drawing) {
+#ifdef __SWITCH__
+    if (!SwitchTweak_Enabled(SWITCH_TWEAK_BACKGROUND_SHADERS)) {
+        return 0;
+    }
+#endif
     static std::string sHinted;
     static auto sLastInput = std::chrono::steady_clock::now();
     const auto now = std::chrono::steady_clock::now();
