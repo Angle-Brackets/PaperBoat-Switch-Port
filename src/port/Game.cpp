@@ -149,6 +149,8 @@ extern "C"
     SWITCH_MEM_CHECKPOINT("init_game_globals");
     load_engine_data();
     SWITCH_MEM_CHECKPOINT("load_engine_data");
+    // Before the game draws anything: the queued global shader set, behind a progress screen.
+    GameEngine::Instance->PrewarmShadersAtBoot();
 
     Graphics_Start();
     SWITCH_MEM_CHECKPOINT("Graphics_Start");

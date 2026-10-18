@@ -80,6 +80,8 @@ class GameEngine {
     GameEngine();
     void StartFrame() const;
     void RenderGuiFrame() const;
+    // Compiles the queued global shader set before the game starts, with a progress screen.
+    void PrewarmShadersAtBoot() const;
     static void DrainRenderService();
     static void ShutdownRenderService();
     static bool GenAssetFile(bool exitOnFail = true);

@@ -37,6 +37,7 @@ extern "C" uint32_t envSetNextLoad(const char* path, const char* argv);
 #include <cstdarg>
 #include <fast/Fast3dWindow.h>
 #include <fast/interpreter.h>
+#include <fast/ShaderPrewarm.h>
 #include <fast/resource/ResourceType.h>
 #include <fast/resource/factory/DisplayListFactory.h>
 #include <fast/resource/factory/LightFactory.h>
@@ -1347,6 +1348,49 @@ void GameEngine::RenderGuiFrame() const {
     gui->EndDraw();
     wnd->EndFrame();
     OS_ViNotifyPresent();
+}
+
+void GameEngine::PrewarmShadersAtBoot() const {
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow());
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+    auto interpreter = wnd != nullptr ? wnd->GetInterpreterWeak().lock() : nullptr;
+    std::vector<std::pair<uint64_t, uint64_t>> ids;
+    std::string label;
+    if (interpreter == nullptr || gui == nullptr || !Fast::ShaderPrewarm::TakePending(ids, label) || ids.empty()) {
+        return;
+    }
+
+    const auto start = std::chrono::steady_clock::now();
+    size_t cursor = 0;
+    size_t compiled = 0;
+    while (cursor < ids.size()) {
+        // ~2 compiles per frame keeps the progress bar moving without a 60 fps target to hit.
+        compiled += interpreter->PrewarmSome(ids, cursor, 30.0);
+
+        gui->StartDraw();
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.4f, 0.0f));
+        ImGui::Begin("##CompilingShaders", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+        ImGui::TextUnformatted("Compiling shaders...");
+        char overlay[32];
+        snprintf(overlay, sizeof(overlay), "%zu / %zu", cursor, ids.size());
+        ImGui::ProgressBar((float) cursor / (float) ids.size(), ImVec2(-1.0f, 0.0f), overlay);
+#pragma push_macro("End") // script_api's EVT End macro
+#undef End
+        ImGui::End();
+#pragma pop_macro("End")
+        wnd->StartFrame();
+        wnd->RunGuiOnly();
+        gui->EndDraw();
+        wnd->EndFrame();
+    }
+    SPDLOG_INFO(
+        "[shaders] prewarm {} at boot: compiled {} of {} listed in {} ms", label, compiled, ids.size(),
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count()
+    );
 }
 
 // C-callable memory allocator
