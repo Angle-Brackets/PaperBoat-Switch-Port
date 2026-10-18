@@ -228,17 +228,12 @@ GameEngine::GameEngine() {
                 CVarSetInteger(name, value);
             }
         };
-        auto defaultFloat = [](const char* name, float value) {
-            if (CVarGet(name) == nullptr) {
-                CVarSetFloat(name, value);
-            }
-        };
         // No keyboard for F1/Esc: controller nav so Minus (GamepadBack) opens the menu.
         defaultInt(CVAR_IMGUI_CONTROLLER_NAV, 1);
         defaultInt(CVAR_SETTING("InterpolationFPS"), 60);
         defaultInt(CVAR_VSYNC_ENABLED, 1); // frame pacing relies on it
-        defaultFloat(CVAR_INTERNAL_RESOLUTION, 1.0f);
-        defaultInt(CVAR_MSAA_VALUE, 1);
+        // Internal resolution and MSAA: per mode (handheld/docked), see SwitchGfxProfile.cpp.
+        SwitchGfxProfile_Init();
         // Compiled into the shaders: changing it rebuilds them all (and the prewarm lists hold
         // what was recorded with this).
         defaultInt(CVAR_TEXTURE_FILTER, Fast::FILTER_THREE_POINT);

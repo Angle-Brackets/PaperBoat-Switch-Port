@@ -351,6 +351,12 @@ void PaperboatMenu::AddMenuSettings() {
         .Callback([](WidgetInfo& info) { Ship::Context::GetRawInstance()->GetWindow()->ToggleFullscreen(); })
         .Options(ButtonOptions().Tooltip("Toggles Fullscreen On/Off."));
 #endif
+#ifdef __SWITCH__
+    AddWidget(path, "", WIDGET_TEXT).PreFunc([](WidgetInfo& info) {
+        info.name = std::string("Resolution and MSAA are saved separately for handheld and docked; editing: ") +
+                    SwitchGfxProfile_ModeName() + ".";
+    });
+#endif
     AddWidget(path, "Internal Resolution", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_INTERNAL_RESOLUTION)
         .RaceDisable(false)

@@ -98,6 +98,10 @@ void Finish(const char* why) {
 }
 } // namespace
 
+extern "C" int SwitchGfxBench_Running(void) {
+    return sIndex >= 0;
+}
+
 extern "C" void SwitchGfxBench_Start(void) {
     sRequested = true;
 }
