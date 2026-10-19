@@ -737,7 +737,7 @@ elseif(ANDROID OR EMSCRIPTEN)
 
 elseif(NINTENDO_SWITCH)
     # In-game updater (SwitchUpdater.cpp): the repo it checks, and the release tag CI builds (empty = dev build).
-    set(SWITCH_UPDATE_REPO "Angle-Brackets/PaperBoat" CACHE STRING "GitHub repo the Switch updater checks")
+    set(SWITCH_UPDATE_REPO "Angle-Brackets/PaperBoat-Switch-Port" CACHE STRING "GitHub repo the Switch updater checks")
     set(SWITCH_RELEASE_TAG "" CACHE STRING "Release tag of this build, set by CI")
     target_compile_definitions(${PROJECT_NAME} PRIVATE
         SWITCH_UPDATE_REPO="${SWITCH_UPDATE_REPO}" SWITCH_RELEASE_TAG="${SWITCH_RELEASE_TAG}")

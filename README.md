@@ -86,8 +86,8 @@ Requirements: [devkitPro](https://devkitpro.org/wiki/Getting_Started) with `swit
 `switch-sdl2 switch-glad switch-mesa switch-libdrm_nouveau switch-curl`, and CMake 3.24+.
 
 ```sh
-git clone --recursive https://github.com/Angle-Brackets/PaperBoat.git
-cd PaperBoat
+git clone --recursive https://github.com/Angle-Brackets/PaperBoat-Switch-Port.git
+cd PaperBoat-Switch-Port
 cmake -B build-switch -S . -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build-switch --target Paperboat_nro -j
 ```
