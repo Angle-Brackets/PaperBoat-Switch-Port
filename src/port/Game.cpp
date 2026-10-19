@@ -168,6 +168,7 @@ extern "C"
         SwitchGfxBench_Tick();
         SwitchGfxProfile_Tick();
         SwitchTweaks_Tick();
+        SwitchUpdater_Tick();
 #endif
 #ifdef __SWITCH__
         // Phase times for the hitch monitor: [0] StartFrame+input+render service, [1] ServiceRcp.

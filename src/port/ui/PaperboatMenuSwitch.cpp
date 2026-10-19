@@ -1,6 +1,7 @@
 #include "PaperboatMenu.h"
 
 #ifdef __SWITCH__
+#include "port/Engine.h"
 #include "port/switch/SwitchDebug.h"
 #endif
 
@@ -87,6 +88,66 @@ void PaperboatMenu::AddMenuSwitch() {
         .Options(ButtonOptions().Tooltip(
             "Developer test: close the menu and stand still somewhere busy. Toggles the renderer tweaks "
             "one at a time (~12 s each, about 80 s total) and logs frame times."));
+
+    AddSidebarEntry("Switch", "Updates", 1);
+    path = { "Switch", "Updates", SECTION_COLUMN_1 };
+    AddWidget(path, "", WIDGET_TEXT).PreFunc([](WidgetInfo& info) {
+        char tag[64], error[256];
+        SwitchUpdater_Info(tag, sizeof(tag), error, sizeof(error));
+        std::string status = std::string("Installed: ") + SwitchUpdater_OwnVersion() + "\n";
+        switch (SwitchUpdater_State()) {
+            case SWITCH_UPDATE_CHECKING:
+                status += "Checking for updates...";
+                break;
+            case SWITCH_UPDATE_CURRENT:
+                status += std::string("Up to date (latest release: ") + tag + ").";
+                break;
+            case SWITCH_UPDATE_AVAILABLE:
+                status += std::string("Update available: ") + tag + ".";
+                break;
+            case SWITCH_UPDATE_DOWNLOADING:
+                status += "Downloading " + std::string(tag) + "... " + std::to_string(SwitchUpdater_Progress()) + "%";
+                break;
+            case SWITCH_UPDATE_READY:
+                status += std::string(tag) + " is downloaded. Restart PaperBoat to finish updating.";
+                break;
+            case SWITCH_UPDATE_FAILED:
+                status += std::string("Update check failed: ") + error;
+                break;
+            default:
+                break;
+        }
+        info.name = status;
+    });
+    AddWidget(path, "Check for Updates on Launch", WIDGET_CVAR_CHECKBOX)
+        .CVar(SWITCH_CHECK_UPDATES)
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Asks GitHub for the latest release once per launch and shows a notification if there's a "
+            "newer one. Nothing is downloaded until you choose to."));
+    AddWidget(path, "Check Now", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            const int state = SwitchUpdater_State();
+            info.isHidden = state == SWITCH_UPDATE_AVAILABLE || state == SWITCH_UPDATE_DOWNLOADING ||
+                            state == SWITCH_UPDATE_READY;
+        })
+        .Callback([](WidgetInfo& info) { SwitchUpdater_Check(); });
+    AddWidget(path, "Download Update", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = SwitchUpdater_State() != SWITCH_UPDATE_AVAILABLE; })
+        .Callback([](WidgetInfo& info) { SwitchUpdater_Download(); })
+        .Options(ButtonOptions().Tooltip(
+            "Downloads the new paperboat.nro next to the current one. Your saves, settings and game files "
+            "are not touched."));
+    AddWidget(path, "Restart and Update", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = SwitchUpdater_State() != SWITCH_UPDATE_READY; })
+        .Callback([](WidgetInfo& info) {
+            Ship::Context::GetRawInstance()->GetConsoleVariables()->Save();
+            GameEngine::RequestRelaunch();
+            Ship::Context::GetRawInstance()->GetWindow()->Close();
+        });
 #endif
 }
 

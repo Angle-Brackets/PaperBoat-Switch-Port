@@ -3,6 +3,7 @@
 // Switch-only debug hooks (port/switch/SwitchDebug.c). The macros compile away elsewhere.
 
 #ifdef __SWITCH__
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -32,6 +33,25 @@ const char* SwitchGfxProfile_ModeName(void);
 #define SWITCH_TWEAK_TRI_FAST_PATH "gSwitch.Tweaks.TriFastPath"
 #define SWITCH_TWEAK_PRELOAD_TEXTURES "gSwitch.Tweaks.PreloadTextures"
 int SwitchTweak_Enabled(const char* cvar);
+// Updater (SwitchUpdater.cpp): checks the latest GitHub release and downloads its NRO, swapped in on exit.
+#define SWITCH_CHECK_UPDATES "gSwitch.CheckForUpdates"
+enum {
+    SWITCH_UPDATE_IDLE,
+    SWITCH_UPDATE_CHECKING,
+    SWITCH_UPDATE_CURRENT,
+    SWITCH_UPDATE_AVAILABLE,
+    SWITCH_UPDATE_DOWNLOADING,
+    SWITCH_UPDATE_READY,
+    SWITCH_UPDATE_FAILED,
+};
+int SwitchUpdater_State(void);
+int SwitchUpdater_Progress(void);
+const char* SwitchUpdater_OwnVersion(void);
+void SwitchUpdater_Info(char* latestTag, size_t tagSize, char* error, size_t errorSize);
+void SwitchUpdater_Check(void);
+void SwitchUpdater_Download(void);
+void SwitchUpdater_Tick(void);
+void SwitchUpdater_ApplyPending(void);
 void SwitchTweaks_Tick(void);
 // Logs malloc usage and the delta since the previous checkpoint, to attribute startup memory.
 void SwitchDebug_MemCheckpoint(const char* label);

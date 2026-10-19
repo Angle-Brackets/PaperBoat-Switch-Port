@@ -38,6 +38,7 @@ void userAppExit(void) {
     }
     socketExit();
     romfsExit();
+    SwitchUpdater_ApplyPending(); // replaces the NRO, so only once romfs no longer reads it
 }
 
 // Bumped by LUS's GL backend each time it compiles a shader program.
