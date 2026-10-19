@@ -1,0 +1,115 @@
+name: Switch Release
+
+# Push a tag like switch-v1.0.3 (or switch-v1.0.3-beta1 for a pre-release) to build the NRO and
+# draft a GitHub release with it attached. Run it by hand from the Actions tab to just build.
+on:
+  push:
+    tags:
+      - "switch-v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build NRO
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git openssh-client cmake make zip
+          dkp-pacman -Sy --noconfirm --needed switch-sdl2 switch-glad switch-mesa switch-libdrm_nouveau switch-curl
+
+      - uses: actions/checkout@v4
+
+      # libultraship and Torch are private for now: each has a read-only deploy key, stored as
+      # LUS_DEPLOY_KEY and TORCH_DEPLOY_KEY. Once they're public this step can go back to
+      # `submodules: recursive` on the checkout.
+      - name: Fetch submodules
+        env:
+          LUS_DEPLOY_KEY: ${{ secrets.LUS_DEPLOY_KEY }}
+          TORCH_DEPLOY_KEY: ${{ secrets.TORCH_DEPLOY_KEY }}
+        run: |
+          git config --global --add safe.directory '*'
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          # A deploy key only opens its own repo, so each submodule is fetched with its key.
+          fetch() {
+            key="$1"; repo="$2"; path="$3"
+            if [ -n "$key" ]; then
+              printf '%s\n' "$key" > ~/.ssh/$repo
+              chmod 600 ~/.ssh/$repo
+              git config --global url."git@github.com:Angle-Brackets/$repo".insteadOf "https://github.com/Angle-Brackets/$repo"
+              GIT_SSH_COMMAND="ssh -i ~/.ssh/$repo -o IdentitiesOnly=yes" git submodule update --init --recursive --depth 1 "$path"
+            else
+              git submodule update --init --recursive --depth 1 "$path"
+            fi
+          }
+          fetch "$LUS_DEPLOY_KEY" libultraship external/libultraship
+          fetch "$TORCH_DEPLOY_KEY" Torch external/torch
+
+      - name: Configure
+        # A tagged build knows its own release, so the in-game updater can compare against the latest one.
+        run: |
+          tag=""
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then tag="$GITHUB_REF_NAME"; fi
+          cmake -B build-switch -S . -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release \
+            -DSWITCH_UPDATE_REPO="$GITHUB_REPOSITORY" -DSWITCH_RELEASE_TAG="$tag"
+
+      - name: Build
+        run: cmake --build build-switch --target Paperboat_nro -j$(nproc)
+
+      # SD card layout: extract to the root of the card. config.yml, assets/ and paperboat.o2r are
+      # inside the NRO; the player adds their own ROM to switch/paperboat/.
+      - name: Package
+        run: |
+          mkdir -p package/switch/paperboat
+          cp build-switch/paperboat.nro package/switch/paperboat/
+          (cd package && zip -qr ../PaperBoat-Switch.zip switch)
+          cp build-switch/paperboat.nro paperboat.nro
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PaperBoat-Switch
+          path: |
+            PaperBoat-Switch.zip
+            paperboat.nro
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PaperBoat-Switch
+
+      - name: Write notes
+        run: |
+          cat > notes.md <<'EOF'
+          ## Install
+          1. Extract `PaperBoat-Switch.zip` to the root of your SD card (it creates `switch/paperboat/`).
+          2. Copy your own Paper Mario (US) ROM into `switch/paperboat/` as `baserom.z64`.
+          3. Launch PaperBoat from the Homebrew Menu, opened through a game (hold R while starting one)
+             rather than the Album, so it gets full memory. The first launch builds the game files
+             from the ROM.
+
+          Already have a `pm64.o2r` from PaperBoat on PC? Put it in `switch/paperboat/` instead of the ROM.
+
+          ## Changes
+          <!-- Write these before publishing -->
+          EOF
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: PaperBoat for Switch ${{ github.ref_name }}
+          body_path: notes.md
+          files: |
+            PaperBoat-Switch.zip
+            paperboat.nro
+          draft: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}

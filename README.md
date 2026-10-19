@@ -1,89 +1,109 @@
-# PaperBoat
-*Harbour Masters port of Paper Mario 64*
+# PaperBoat — Switch Port
+*A Nintendo Switch port of [PaperBoat](https://github.com/HarbourMasters/PaperBoat), Harbour Masters' PC port of Paper Mario 64*
 
-Developers:
-* Bass3l
-* JeodC
-* KiritoDv
-* Caladius
+Switch port by Soupa. PaperBoat itself is by the Harbour Masters team (Bass3l, JeodC, KiritoDv, Caladius).
 
-## Website & Discord
-Official Website: https://www.harbourmasters.org/
+> This is an unofficial port. Please don't ask Harbour Masters for help with the Switch version; open an
+> [issue here](../../issues) instead. We do not condone piracy: you need your own copy of the game.
 
-Official Discord: https://discord.gg/harbourmasters
+## Features
+- Runs natively as Switch homebrew, at 60 FPS by default with frame interpolation.
+- Menus, text and the cursor animate at the full frame rate too (Settings → Graphics → *Smooth Menus and Text*).
+- Separate handheld and docked render settings, switched automatically when you dock or undock.
+- Shaders are compiled during loading screens and predicted ahead of time, so walking into a new area or
+  battle doesn't stutter.
+- Textures are preloaded during fades, and game files are read with less SD card contention, for faster loads.
+- Rendering work is spread across the Switch's CPU cores.
+- A **Switch** tab in the menu with performance options and a graphics benchmark.
+- Builds the game files from your ROM on the console itself. No PC tools needed.
 
-*If you're having any trouble after reading through this `README`, feel free ask for help in the PaperBoat text channels. Please keep in mind that we do not condone piracy.*
+# Install
 
-# Quick Start
-
-PaperBoat does not include any copyrighted assets.  You are required to provide a supported copy of the game.
+You need a Switch running custom firmware (Atmosphère) with the Homebrew Menu.
 
 ### 1. Verify your ROM dump
-US SHA1 Hash: `3837f44cda784b466c9a2d99df70d77c322b97a0`
-You can verify you have dumped a supported copy of the game by using the compatibility checker at https://paperboat.equipment/.
+Only the US version is supported. SHA-1: `3837f44cda784b466c9a2d99df70d77c322b97a0`
 
-### 2. Download PaperBoat from [Releases](https://github.com/HarbourMasters/PaperBoat/releases)
+You can check your dump at https://paperboat.equipment/. It must be a `.z64` file (big-endian).
 
-### 3. Launch the Game!
-#### Windows
-* Extract the zip
-* Launch `paperboat.exe`
+### 2. Copy PaperBoat to your SD card
+Download `PaperBoat-Switch.zip` from [Releases](../../releases) and extract it to the root of your SD card.
+That gives you `switch/paperboat/paperboat.nro`.
 
-#### Linux
-* Place your supported copy of the game in the same folder as the appimage.
-* Execute `paperboat.appimage`. You may have to `chmod +x` the appimage via terminal.
+### 3. Add your ROM
+Copy your ROM into `switch/paperboat/` and name it **`baserom.z64`**.
 
-#### macOS
-* Run `paperboat.app`.
-* When prompted, select your supported copy of the game.
+Keep it there after setup: a future update may need to rebuild the game files from it.
 
-### 4. Play!
+### 4. Launch
+Open the Homebrew Menu **through a game**: hold **R** while starting any game, then pick PaperBoat.
+Don't launch from the Album. That mode gives homebrew much less memory.
 
-Congratulations, you are now sailing with PaperBoat! Have fun!
+On first launch PaperBoat builds the game files (`pm64.o2r`) from `baserom.z64` by itself, showing each step's
+progress. This takes about a minute and a half and only happens once. Then PaperBoat restarts into the game.
 
-# Configuration
+**Already have PaperBoat on PC?** Copy the `pm64.o2r` it generated into `switch/paperboat/` instead of the ROM
+to skip that step.
 
-### Default keyboard configuration
-| N64 | A | B | Z | Start | Analog stick | C buttons | D-Pad |
-| - | - | - | - | - | - | - | - |
-| Keyboard | X | C | Z | Space | WASD | Arrow keys | TFGH |
+### Home screen icon (optional)
+To launch PaperBoat from the Switch home screen, make a **forwarder**: a small installable title that opens
+`sdmc:/switch/paperboat/paperboat.nro`. Forwarders are built with your console's own keys, so we can't ship
+one. Use a forwarder creator tool with your `prod.keys`, point it at that path, and install the result.
+A forwarder always gets full memory, and it keeps working after you update the `.nro`.
 
-### Other shortcuts
-| Keys | Action |
+# Updating
+**In the game:** PaperBoat checks for a new release when it starts and shows a notification if there is one.
+Open the menu (**−**) → **Switch** → **Updates**, choose **Download Update**, then **Restart and Update**.
+You can turn off the launch check there, or use **Check Now**. Nothing is downloaded until you choose to.
+
+**By hand:** download the new `PaperBoat-Switch.zip` and extract it over the old one, replacing `paperboat.nro`.
+
+Either way, your saves, settings and game files are kept.
+
+# Playing
+
+- **−** (Minus) opens the PaperBoat menu, which you can navigate with the controller.
+- Controls follow the standard layout. Remap them under Settings → Controller.
+- Saves and settings are stored in `switch/paperboat/`.
+
+### Switch tab
+| Option | What it does |
 | - | - |
-| Esc | Toggle menubar |
-| F11 | Fullscreen |
-| Tab | Toggle Alternate assets |
-| Ctrl+R | Reset |
+| Hold Loads for Shaders | Waits on loading screens until the next area's shaders are ready (avoids stutter). |
+| Smooth Fade-In | Holds the screen dark until the first frames are ready. |
+| Predict Next Area's Shaders | Compiles shaders for where you're likely to go next while the game is idle. |
+| Preload Textures | Loads textures during fades instead of on first use. |
+| Spread Threads Across Cores | Pins game, render and loader threads to separate cores (applies next launch). |
+| Renderer options | Driver-overhead reductions. Leave them on unless you see graphics glitches. |
+| Benchmarks | Measure frame times at different resolutions and anti-aliasing levels. |
+| Updates | Shows your version, checks for new releases and installs them. |
 
-### Graphics Backends
-Currently, there are three rendering APIs supported: DirectX 11 (Windows), OpenGL (all platforms), and Metal (macOS). You can change which API to use in the `Settings` menu of the menubar, which requires a restart.
+All are on by default.
 
-If you're having an issue with crashing, you can also change the API manually in the `paperboat.cfg.json` file by finding the `"Backend": {` section and updating the backend ID and name. Be sure to use one of the valid values:
+# Building
 
-- `0` = DirectX 11 (default on Windows)
-- `1` = OpenGL
-- `2` = Metal (default on macOS)
+Requirements: [devkitPro](https://devkitpro.org/wiki/Getting_Started) with `switch-dev`, plus
+`switch-sdl2 switch-glad switch-mesa switch-libdrm_nouveau switch-curl`, and CMake 3.24+.
 
-# Custom Assets
+```sh
+git clone --recursive https://github.com/Angle-Brackets/PaperBoat.git
+cd PaperBoat
+cmake -B build-switch -S . -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build-switch --target Paperboat_nro -j
+```
 
-Custom assets are packed in `.o2r` or `.otr` files. To use custom assets, place them in the `mods` folder.
+The result is `build-switch/paperboat.nro`, with `paperboat.o2r`, `config.yml` and the extractor's `assets/`
+bundled inside it.
 
-If you're interested in creating and/or packing your own custom asset `.o2r`/`.otr` files, check out the following tools:
-* [**retro - OTR and O2R generator**](https://github.com/HarbourMasters64/retro)
-* [**fast64 - Blender plugin (Note that PM64 is not fully supported at this time)**](https://github.com/HarbourMasters/fast64)
+To test on hardware, open the Homebrew Menu's NetLoader (**Y**) and run
+`switch/run.sh <switch-ip>`. It sends the build with nxlink and streams the game's log to your terminal.
 
-# Development
+Releases are built by GitHub Actions (`.github/workflows/switch-release.yml`) when a `switch-v*` tag is pushed.
 
-### Building
-If you want to manually compile PaperBoat, please consult the [building instructions](docs/BUILDING.md).
+The Switch port uses a [fork of libultraship](https://github.com/Angle-Brackets/libultraship/tree/pm64-switch)
+(branch `pm64-switch`) with Switch support. Upstream libultraship dropped Switch support.
 
-### Playtesting
-If you want to playtest a continuous integration build, you can find them at the links below. Keep in mind that these are for playtesting only, and you will likely encounter bugs and possibly crashes.
-
-* [Windows](https://nightly.link/HarbourMasters/PaperBoat/workflows/build/develop/Paperboat-windows.zip)
-* [macOS](https://nightly.link/HarbourMasters/PaperBoat/workflows/build/develop/Paperboat-mac.zip)
-* [Linux](https://nightly.link/HarbourMasters/PaperBoat/workflows/build/develop/Paperboat-linux.zip)
+For desktop builds, see the upstream [building instructions](docs/BUILDING.md).
 
 <a href="https://github.com/Kenix3/libultraship/">
   <picture>
@@ -92,13 +112,14 @@ If you want to playtest a continuous integration build, you can find them at the
   </picture>
 </a>
 
-# Special Thanks:
+# Special Thanks
 
-This wouldn't have been possible without your amazing work:
-
+* [Harbour Masters](https://www.harbourmasters.org/) and the PaperBoat team, for PaperBoat and libultraship
 * [The Paper Mario decomp team](https://github.com/pmret/papermario)
 * [The Paper Mario DX team](https://github.com/bates64/papermario-dx)
+* [devkitPro](https://devkitpro.org/) and the Switch homebrew community
 
 # AI Disclosure
 
-PaperBoat accepts pull requests that use AI, within policy guidelines. For more information please see the HarbourMasters [AI Policy](https://github.com/HarbourMasters/code-of-conduct/blob/main/AI_POLICY.md).
+PaperBoat accepts pull requests that use AI, within policy guidelines. For more information please see the
+HarbourMasters [AI Policy](https://github.com/HarbourMasters/code-of-conduct/blob/main/AI_POLICY.md).
