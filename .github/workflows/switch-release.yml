@@ -1,12 +1,22 @@
-name: Switch Release
+name: Switch Build
 
-# Push a tag like switch-v1.0.3 (or switch-v1.0.3-beta1 for a pre-release) to build the NRO and
-# draft a GitHub release with it attached. Run it by hand from the Actions tab to just build.
+# Every push to switch-port and every pull request builds the NRO, so a change that breaks the Switch
+# build is caught before it ships. The build is downloadable from the run's artifacts.
+# Push a tag like switch-v1.0.3 (or switch-v1.0.3-beta1 for a pre-release) to also draft a GitHub
+# release with it attached. It can be run by hand from the Actions tab too.
 on:
   push:
+    branches:
+      - switch-port
     tags:
       - "switch-v*"
+  pull_request:
   workflow_dispatch:
+
+# A newer push to the same branch or PR replaces a running build. Tag builds always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
