@@ -121,5 +121,6 @@ For desktop builds, see the upstream [building instructions](docs/BUILDING.md).
 
 # AI Disclosure
 
-PaperBoat accepts pull requests that use AI, within policy guidelines. For more information please see the
-HarbourMasters [AI Policy](https://github.com/HarbourMasters/code-of-conduct/blob/main/AI_POLICY.md).
+The Switch port was developed with the help of AI tools. Like PaperBoat, this repo follows the HarbourMasters
+[AI Policy](https://github.com/HarbourMasters/code-of-conduct/blob/main/AI_POLICY.md), and accepts pull
+requests that use AI within its guidelines.
