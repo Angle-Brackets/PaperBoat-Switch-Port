@@ -41,6 +41,12 @@ namespace {
 // Where config.yml lives. Empty means "ask Ship::Context"; the Android
 // launcher runs before it exists and names the directory itself.
 std::filesystem::path ConfigPath(const std::string& configDir) {
+#ifdef __SWITCH__
+    // A copy next to the .nro wins; otherwise the one bundled in romfs.
+    if (configDir.empty()) {
+        return Ship::Context::LocateFileAcrossAppDirs("config.yml");
+    }
+#endif
     const auto base =
         configDir.empty() ? std::filesystem::path(Ship::Context::GetAppBundlePath()) : std::filesystem::path(configDir);
     return base / "config.yml";
@@ -334,7 +340,12 @@ bool GameExtractor::GenerateOTRTo(
 
     sPhase = 3;
     sStatusText = "Cleaning up...";
+#ifdef __SWITCH__
+    // Freeing Torch's tens of thousands of allocations takes minutes here, and the game relaunches right after
+    // extracting (see RunExtract), which frees them all at once.
+#else
     delete Companion::Instance;
+#endif
     Companion::Instance = nullptr;
     sStatusText.clear();
     sPhase = 0;

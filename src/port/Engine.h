@@ -91,6 +91,8 @@ class GameEngine {
     void FinishInit();
     void RunExtract(int argc, char* argv[]);
     static bool sRelaunchRequested;
+    // Switch: set by RunExtract after building pm64.o2r; Create then restarts the game.
+    static bool sRestartAfterSetup;
     static bool CanRelaunch();
     static void RequestRelaunch() {
         sRelaunchRequested = true;

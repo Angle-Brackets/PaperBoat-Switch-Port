@@ -1,7 +1,7 @@
 [submodule "external/torch"]
 	path = external/torch
-	url = https://github.com/HarbourMasters/Torch.git
-	branch = main
+	url = https://github.com/Angle-Brackets/Torch.git
+	branch = pm64-switch
 [submodule "external/libultraship"]
 	path = external/libultraship
 	url = https://github.com/Angle-Brackets/libultraship.git

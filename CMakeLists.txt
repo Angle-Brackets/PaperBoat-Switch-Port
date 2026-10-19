@@ -736,6 +736,14 @@ elseif(ANDROID OR EMSCRIPTEN)
     target_link_options(${PROJECT_NAME} PRIVATE -pthread)
 
 elseif(NINTENDO_SWITCH)
+    # In-game updater (SwitchUpdater.cpp): the repo it checks, and the release tag CI builds (empty = dev build).
+    set(SWITCH_UPDATE_REPO "Angle-Brackets/PaperBoat" CACHE STRING "GitHub repo the Switch updater checks")
+    set(SWITCH_RELEASE_TAG "" CACHE STRING "Release tag of this build, set by CI")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        SWITCH_UPDATE_REPO="${SWITCH_UPDATE_REPO}" SWITCH_RELEASE_TAG="${SWITCH_RELEASE_TAG}")
+    find_library(SWITCH_CURL_LIBRARY curl REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${SWITCH_CURL_LIBRARY})
+
     # Flags follow Shipwright's soh/CMakeLists.txt Switch branch.
     target_compile_options(${PROJECT_NAME} PRIVATE
         -Wall -Wextra -Wno-error
@@ -870,8 +878,8 @@ if(NINTENDO_SWITCH)
     # Paperboat.elf -> paperboat.nro, rebuilt on every build (the _nro target is ALL).
     nx_generate_nacp(OUTPUT paperboat.nacp
         NAME "PaperBoat"
-        AUTHOR "Harbour Masters / Port"
-        VERSION "1.0.0"
+        AUTHOR "Soupa (Switch port), Harbour Masters"
+        VERSION "${PROJECT_VERSION}"
     )
 
     # paperboat.o2r (shaders, port assets) rides inside the NRO's romfs, so it always matches the
@@ -884,7 +892,18 @@ if(NINTENDO_SWITCH)
         DEPENDS "${PAPERBOAT_PORT_O2R}"
         VERBATIM
     )
-    add_custom_target(StagePortRomfs DEPENDS "${PAPERBOAT_ROMFS_DIR}/paperboat.o2r")
+    # The extractor's recipes (config.yml, assets/) too, so a ROM next to the .nro is all a first run needs.
+    # Copies on the SD card take precedence (see LocateFileAcrossAppDirs).
+    file(GLOB_RECURSE PAPERBOAT_EXTRACTOR_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*")
+    add_custom_command(
+        OUTPUT "${PAPERBOAT_ROMFS_DIR}/config.yml"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/config.yml" "${PAPERBOAT_ROMFS_DIR}/config.yml"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${PAPERBOAT_ROMFS_DIR}/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "${PAPERBOAT_ROMFS_DIR}/assets"
+        DEPENDS "${CMAKE_SOURCE_DIR}/config.yml" ${PAPERBOAT_EXTRACTOR_FILES}
+        VERBATIM
+    )
+    add_custom_target(StagePortRomfs DEPENDS "${PAPERBOAT_ROMFS_DIR}/paperboat.o2r" "${PAPERBOAT_ROMFS_DIR}/config.yml")
     add_dependencies(${PROJECT_NAME} StagePortRomfs)
 
     nx_create_nro(${PROJECT_NAME}

@@ -49,6 +49,9 @@ extern "C" uint32_t envSetNextLoad(const char* path, const char* argv);
 #include <fstream>
 #include <imgui.h>
 #include <chrono>
+#ifdef __SWITCH__
+#include <imgui_internal.h> // BringWindowToDisplayFront, for the setup screen
+#endif
 #include <libultraship.h>
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include <ship/controller/controldevice/controller/mapping/sdl/SDLButtonToAxisDirectionMapping.h>
@@ -418,6 +421,89 @@ void GameEngine::ScaleImGui() {
     previousImGuiScaleIndex = imGuiScaleIndex;
 }
 
+#ifdef __SWITCH__
+#pragma push_macro("End")
+#undef End // the game's event-script macro, which hides ImGui::End
+// First-time setup on Switch: one full-screen page, sized for a TV or handheld and readable from the couch,
+// instead of small desktop dialogs. Shows each step while the ROM is extracted, or why it can't be.
+// Returns true when the player asks to exit (any face button, + or the on-screen button).
+static bool DrawSwitchSetupScreen(const std::string& romName, const std::string& message, int stage, int phase,
+                                  size_t done, size_t total, std::chrono::steady_clock::time_point start) {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float scale = vp->Size.y / 360.0f; // 2x at 720p, 3x at 1080p
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.07f, 0.10f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(40.0f * scale, 30.0f * scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * scale, 6.0f * scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f * scale, 8.0f * scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * scale);
+    ImGui::Begin("##SwitchSetup", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+    // In front of the (black) game view every frame; it's the only thing on screen during setup.
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    const float textScale = scale / 1.6f;
+    ImGui::SetWindowFontScale(textScale * 1.6f);
+    ImGui::TextUnformatted("PaperBoat - First-Time Setup");
+    ImGui::SetWindowFontScale(textScale);
+    ImGui::Spacing();
+
+    bool exit = false;
+    if (!message.empty()) {
+        ImGui::PushTextWrapPos(vp->Size.x - 40.0f * scale);
+        ImGui::TextUnformatted(message.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        exit = ImGui::Button("Exit (+)", ImVec2(160.0f * scale, 40.0f * scale));
+        for (ImGuiKey key : { ImGuiKey_GamepadStart, ImGuiKey_GamepadFaceDown, ImGuiKey_GamepadFaceRight }) {
+            exit |= ImGui::IsKeyPressed(key, false);
+        }
+    } else {
+        ImGui::TextWrapped("Building the game files from your ROM. This only happens once and takes a few "
+                           "minutes. Please don't close PaperBoat.");
+        ImGui::Spacing();
+        // Steps: 0 find ROM (done by now), 1 read ROM, 2 build files, 3 finish.
+        const int current = stage == 0 ? 0 : phase >= 3 ? 3 : done > 0 ? 2 : 1;
+        const char* steps[] = { "Find your ROM", "Read the ROM", "Build the game files", "Restart PaperBoat" };
+        for (int i = 0; i < 4; i++) {
+            const bool finished = i < current;
+            const ImVec4 color = finished       ? ImVec4(0.45f, 0.85f, 0.45f, 1.0f)
+                                 : i == current ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f)
+                                                : ImVec4(0.5f, 0.5f, 0.55f, 1.0f);
+            std::string line = std::string(finished ? "[done]  " : i == current ? "[ .. ]  " : "[    ]  ") +
+                               std::to_string(i + 1) + ". " + steps[i];
+            if (i == 0 && !romName.empty()) {
+                line += "  (" + romName + ")";
+            }
+            ImGui::TextColored(color, "%s", line.c_str());
+        }
+        ImGui::Spacing();
+
+        // Reading has no count, so the bar sweeps; building fills by assets done.
+        const float elapsed =
+            std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
+        float fraction = total > 0 ? std::min(1.0f, (float) done / (float) total) : 0.0f;
+        std::string overlay = fmt::format("{} / {}", done, total);
+        if (current <= 1) {
+            fraction = 0.5f + 0.5f * std::sin(elapsed * 2.0f);
+            overlay = current == 0 ? "Looking for your ROM..." : "Reading...";
+        } else if (current == 3) {
+            fraction = 1.0f;
+            overlay = "Done! Restarting...";
+        }
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.30f, 0.60f, 1.0f, 1.0f));
+        ImGui::ProgressBar(fraction, ImVec2(-1.0f, 34.0f * scale), overlay.c_str());
+        ImGui::PopStyleColor();
+        ImGui::Text("Elapsed %d:%02d", (int) elapsed / 60, (int) elapsed % 60);
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(4);
+    ImGui::PopStyleColor();
+    return exit;
+}
+#pragma pop_macro("End")
+#endif
+
 void GameEngine::RunExtract(int argc, char* argv[]) {
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
@@ -446,7 +532,8 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
     std::string file;
     std::filesystem::path ownPath;
 
-    if (!std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("assets"))) {
+    // assets/ is only needed to generate pm64.o2r; an archive made elsewhere (e.g. on a PC) runs without it.
+    if (!AnyRomArchiveExists() && !std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("assets"))) {
         PaperboatGui::RegisterPopup(
             "Extractor assets not found",
             "No O2R files found. Missing 'assets/' folder needed to generate O2R "
@@ -460,9 +547,15 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
     }
 
     std::shared_ptr<BS::thread_pool> threadPool = std::make_shared<BS::thread_pool>(1);
+    // Switch: set when setup can't continue; the setup screen shows it until the player exits.
+    std::string setupMessage;
+    const auto setupStart = std::chrono::steady_clock::now();
+    std::atomic<int> setupStage { 0 }; // 0 looking for the ROM, 1 extracting it
+    std::atomic<bool> setupNoRom { false };
+    std::atomic<bool> setupBadRom { false };
 
     while (!extractDone) {
-        if (PaperboatGui::PopupsQueued() > 0 || extracting) {
+        if (PaperboatGui::PopupsQueued() > 0 || extracting || !setupMessage.empty()) {
             goto render;
         }
 
@@ -606,7 +699,28 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                             extractStep = ES_VERIFY;
                             continue;
                         }
-#ifdef __EMSCRIPTEN__
+#ifdef __SWITCH__
+                        // No questions on Switch: switch/paperboat/baserom.z64 (the usual decomp name) is extracted
+                        // right away. Checking its hash means reading all 40 MB, so that runs on the worker too,
+                        // behind the setup screen, and only once.
+                        promptStep = PS_FIRST;
+                        extracting = true;
+                        extractStarted = true;
+                        threadPool->submit_task([&]() -> void {
+                            const std::string rom = Ship::Context::GetPathRelativeToAppDirectory("baserom.z64");
+                            if (!std::filesystem::exists(rom)) {
+                                setupNoRom = true;
+                            } else if (!extract.RunStandalone(rom)) {
+                                setupBadRom = true;
+                            } else {
+                                file = rom;
+                                setupStage = 1; // after `file`: the screen reads it from stage 1 on
+                                extract.GenerateOTR(extractCount, totalExtract, "boat");
+                            }
+                            extracting = false;
+                        });
+                        continue;
+#elif defined(__EMSCRIPTEN__)
                         promptStep = PS_WEB_CHOICE;
 #else
                         PaperboatGui::RegisterPopup(
@@ -703,7 +817,7 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                 break;
             }
             case ES_EXTRACT_ARGS: {
-#if !defined(__SWITCH__) && !defined(__WIIU__)
+#if !defined(__WIIU__) // Torch is linked on Switch too, so a ROM in the app folder is extracted on the console
                 if (args.size() == 0) {
                     PaperboatGui::RegisterPopup(
                         "Run PaperBoat", "All files have been processed. Run PaperBoat?", "Yes", "No",
@@ -755,6 +869,35 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                 break;
             }
             case ES_VERIFY: {
+#ifdef __SWITCH__
+                if (setupNoRom) {
+                    setupMessage = "No ROM found.\n\nCopy your Paper Mario (US) ROM to the SD card as "
+                                   "switch/paperboat/baserom.z64, then start PaperBoat again.\n\n"
+                                   "Or copy a pm64.o2r made by PaperBoat on PC there instead.";
+                    continue;
+                }
+                if (setupBadRom) {
+                    setupMessage = "switch/paperboat/baserom.z64 isn't a supported ROM.\n\nPaperBoat needs the US "
+                                   "version of Paper Mario in .z64 (big-endian) format, SHA-1 "
+                                   "3837f44cda784b466c9a2d99df70d77c322b97a0. You can check your dump at "
+                                   "paperboat.equipment.";
+                    continue;
+                }
+                if (!AnyRomArchiveExists()) {
+                    setupMessage = "Building the game files failed:\n\n" +
+                                   (GameExtractor::sLastError.empty() ? std::string("No pm64.o2r was written.")
+                                                                      : GameExtractor::sLastError) +
+                                   "\n\nDetails are in switch/paperboat/logs/ on the SD card.";
+                    continue;
+                }
+                if (extractStarted) {
+                    // The extractor's memory is left allocated (freeing it takes minutes), and the archive list was
+                    // built before pm64.o2r existed, so start over: Create shuts down and the loader relaunches us.
+                    sRestartAfterSetup = true;
+                    extractDone = true;
+                    continue;
+                }
+#endif
                 if (!AnyRomArchiveExists()) {
                     if (PaperboatGui::PopupsQueued() == 0) {
                         std::string errorMsg;
@@ -813,6 +956,21 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
         gui->StartDraw();
         wnd->StartFrame();
         wnd->RunGuiOnly();
+#ifdef __SWITCH__
+        if (extracting || !setupMessage.empty()) {
+            const bool exitRequested =
+                DrawSwitchSetupScreen(setupStage >= 1 ? std::filesystem::path(file).filename().string() : "",
+                                      setupMessage, setupStage, GameExtractor::sPhase, extractCount, totalExtract,
+                                      setupStart);
+            if (exitRequested) {
+                threadPool = nullptr;
+                gsFast3dWindow = nullptr;
+                context = nullptr;
+                exit(0);
+            }
+        }
+#endif
+#ifndef __SWITCH__
         if (extracting && !ImGui::IsPopupOpen("ROM Extraction")) {
             ImGui::OpenPopup("ROM Extraction");
         }
@@ -863,6 +1021,7 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
             ImGui::PopStyleColor(3);
             ImGui::PopStyleVar(2);
         }
+#endif
         gui->EndDraw();
         wnd->EndFrame();
         ImGui::PopStyleColor(2);
@@ -882,6 +1041,19 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
 void GameEngine::Create(int argc, char* argv[]) {
     const auto instance = Instance = new GameEngine();
     instance->RunExtract(argc, argv);
+#ifdef __SWITCH__
+    if (sRestartAfterSetup) {
+        // Close the window, GL and archives first, as a normal quit does: exiting with them open crashes in the
+        // system's teardown.
+        instance->context = nullptr;
+        gsFast3dWindow = nullptr;
+        Ship::Context::DestroyInstance();
+        gShipContext = nullptr;
+        RequestRelaunch();
+        RelaunchIfRequested(argc, argv);
+        exit(0);
+    }
+#endif
     instance->FinishInit();
     PaperboatGui::SetupGuiElements();
     PortEnhancements_Init();
@@ -890,6 +1062,7 @@ void GameEngine::Create(int argc, char* argv[]) {
 }
 
 bool GameEngine::sRelaunchRequested = false;
+bool GameEngine::sRestartAfterSetup = false;
 
 bool GameEngine::CanRelaunch() {
 #if defined(_WIN32) || ((defined(__linux__) || defined(__APPLE__)) && !defined(__ANDROID__))
