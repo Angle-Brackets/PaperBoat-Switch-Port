@@ -97,6 +97,13 @@ jobs:
         with:
           name: PaperBoat-Switch
 
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
+      # Notes are the install steps plus this tag's section of CHANGELOG.md.
       - name: Write notes
         run: |
           cat > notes.md <<'EOF'
@@ -109,9 +116,18 @@ jobs:
 
           Already have a `pm64.o2r` from PaperBoat on PC? Put it in `switch/paperboat/` instead of the ROM.
 
-          ## Changes
-          <!-- Write these before publishing -->
+          **Updating:** Switch tab → Updates in the game, or extract the new zip over the old one.
+
           EOF
+          section=$(awk -v tag="## $GITHUB_REF_NAME" '
+            $0 == tag { found = 1; next }
+            found && /^## / { exit }
+            found { print }' src/CHANGELOG.md)
+          if [ -z "$(printf '%s' "$section" | tr -d '[:space:]')" ]; then
+            echo "::warning::CHANGELOG.md has no section for $GITHUB_REF_NAME"
+            section="<!-- No CHANGELOG.md section for this tag: write the changes before publishing -->"
+          fi
+          printf '## Changes\n%s\n' "$section" >> notes.md
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -121,5 +137,4 @@ jobs:
             PaperBoat-Switch.zip
             paperboat.nro
           draft: true
-          generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}

@@ -3,6 +3,8 @@
 
 Switch port by Soupa. PaperBoat itself is by the Harbour Masters team (Bass3l, JeodC, KiritoDv, Caladius).
 
+**Latest version: switch-v1.0.3** · [What's new](CHANGELOG.md) · [Download](../../releases/latest)
+
 > This is an unofficial port. Please don't ask Harbour Masters for help with the Switch version; open an
 > [issue here](../../issues) instead. We do not condone piracy: you need your own copy of the game.
 
@@ -58,7 +60,7 @@ You can turn off the launch check there, or use **Check Now**. Nothing is downlo
 
 **By hand:** download the new `PaperBoat-Switch.zip` and extract it over the old one, replacing `paperboat.nro`.
 
-Either way, your saves, settings and game files are kept.
+Either way, your saves, settings and game files are kept. See the [changelog](CHANGELOG.md) for what each update changes.
 
 # Playing
 
