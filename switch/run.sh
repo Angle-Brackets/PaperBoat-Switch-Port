@@ -2,7 +2,7 @@
 # Build Paperboat_nro, push it to NetLoader, stream its stdout/stderr, and
 # symbolize any "Paperboat+0x..." addresses in the output (crash backtraces).
 #
-#   switch/run.sh [switch-ip]      (default 192.168.86.191; env SWITCH_IP also works)
+#   switch/run.sh [switch-ip]      (or env SWITCH_IP, or the IP in switch/.switch-ip, which git ignores)
 #   NOBUILD=1 switch/run.sh        skip the build
 #   WAIT=1 switch/run.sh           wait (up to 30 min) until NetLoader is listening (Y in hbmenu)
 #
@@ -11,7 +11,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build-switch"
-IP="${1:-${SWITCH_IP:-192.168.86.191}}"
+IP="${1:-${SWITCH_IP:-$(cat "$ROOT/switch/.switch-ip" 2>/dev/null || true)}}"
+if [[ -z "$IP" ]]; then
+    echo "Pass the Switch's IP (shown in hbmenu's NetLoader), set SWITCH_IP, or put it in switch/.switch-ip." >&2
+    exit 1
+fi
 DKP="${DEVKITPRO:-/opt/devkitpro}"
 ADDR2LINE="$DKP/devkitA64/bin/aarch64-none-elf-addr2line"
 NXLINK="$DKP/tools/bin/nxlink"

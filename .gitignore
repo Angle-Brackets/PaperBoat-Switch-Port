@@ -109,3 +109,4 @@ CMakeSettings.json
 CMakeUserPresets.json
 *.exe
 /.vs
+switch/.switch-ip
