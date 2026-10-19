@@ -157,8 +157,13 @@ void draw_message_window(MessagePrintState* printer) {
                      SCREEN_HEIGHT, nullptr);
             break;
         default:
+            // [port] Rigid: the text moves only with the window. Glyphs are paired by texture, so a selection
+            // change otherwise slid the highlighted letters from the old option to the new one.
+            gDPRectGroupRigid(gMainGfxPos++, printer, printer->windowBasePos.x + printer->windowOffsetPos.x,
+                              printer->windowBasePos.y + printer->windowOffsetPos.y);
             appendGfx_message(printer, printer->windowOffsetPos.x, printer->windowOffsetPos.y, printer->unk_46C,
                               printer->curLinePos, 4, 0);
+            gDPRectGroupEnd(gMainGfxPos++);
             break;
     }
 }
@@ -618,7 +623,7 @@ void appendGfx_message(MessagePrintState* printer, s16 posX, s16 posY, u16 addit
                         msg_drawState->clipY[0] = frameY + 2;
                         msg_drawState->clipX[1] = frameX + frameSizeX - 2;
                         msg_drawState->clipY[1] = frameY + frameSizeY - 2;
-                        if (sMsgChoiceOpening) {
+                        if (sMsgChoiceOpening && port_smoothMenus()) {
                             msg_draw_frame_scaled(printer->windowBasePos.x, printer->windowBasePos.y, windowSizeX,
                                                   windowSizeY, temp_f10, msg_drawState->framePalette, frameFading,
                                                   frameAlpha, frameAlpha, printer);

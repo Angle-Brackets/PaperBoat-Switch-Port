@@ -1141,6 +1141,10 @@ static void NoteFramePresented(std::chrono::steady_clock::duration took) {
     sFramesPresented++;
 }
 
+extern "C" int port_smoothMenus(void) {
+    return CVarGetInteger(CVAR_SETTING("InterpolateMenus"), 1);
+}
+
 extern "C" int port_renderSettled(void) {
     constexpr uint32_t kMinFrames = 3;     // the first frames of a map load its textures
     constexpr int64_t kQuietMs = 100;      // no slow frame for this long
@@ -1166,6 +1170,9 @@ extern "C" int port_renderSettled(void) {
            now - sLastSlowFrameMs > kQuietMs;
 }
 
+// The interpolation factor of each of ProcessGfxCommands' mtx_replacements, for RunCommands.
+static std::vector<float> sInterpolationTs;
+
 void GameEngine::RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements) {
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow());
 
@@ -1187,6 +1194,10 @@ void GameEngine::RunCommands(Gfx* Commands, const std::vector<std::unordered_map
             interpreter->mInterpolationIndex++;
             continue;
         }
+        // Key frames (no replacements) record each 2D rect; in-between frames move rects towards them.
+        const bool keyFrame = mtx_replacements[i].empty();
+        interpreter->mInterpolationT = keyFrame ? 1.0f : sInterpolationTs[i];
+        interpreter->mRectLerpMode = !port_smoothMenus() ? 0 : keyFrame ? 1 : 2;
         const auto frameStart = std::chrono::steady_clock::now();
         wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements[i], {});
         NoteFramePresented(std::chrono::steady_clock::now() - frameStart);
@@ -1221,12 +1232,15 @@ void GameEngine::ProcessGfxCommands(Gfx* commands) {
     }
 
     int next_original_frame = fps;
+    sInterpolationTs.clear();
     while (time + original_fps <= next_original_frame) {
         time += original_fps;
         if (time != next_original_frame) {
             mtx_replacements.push_back(FrameInterpolation_Interpolate((float) time / next_original_frame));
+            sInterpolationTs.push_back((float) time / next_original_frame);
         } else {
             mtx_replacements.emplace_back(); // No interpolation for key frames
+            sInterpolationTs.push_back(1.0f);
         }
     }
 

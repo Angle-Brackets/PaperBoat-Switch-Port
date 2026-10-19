@@ -139,13 +139,15 @@ BSS u8 filemenu_glyphBuffer[20][0x80];
 #endif
 
 void filemenu_draw_rect(s32 ulx, s32 uly, s32 lrx, s32 lry, s32 tileIdx, s32 uls, s32 ult, s32 dsdx, s32 dtdy) {
-    if (ulx <= -2688 || uly <= -2688 || lrx <= 0 || lry <= 0) {
+    // [port] Wide rects reach past the 4:3 edges, so text sliding in from the sides isn't cut off there
+    // (the N64 version clipped at x = 0 and dropped anything past x = 320).
+    if (ulx <= -2688 || uly <= -2688 || lrx <= -1280 || lry <= 0) {
         return;
     }
-    if (ulx >= 1280 || uly >= 960 || lrx >= 2688 || lry >= 2688) {
+    if (ulx >= 2560 || uly >= 960 || lrx >= 2688 || lry >= 2688) {
         return;
     }
-    gSPScisTextureRectangle(gMainGfxPos++, ulx, uly, lrx, lry, tileIdx, uls, ult, dsdx, dtdy);
+    gSPWideTextureRectangle(gMainGfxPos++, ulx, uly, lrx, lry, tileIdx, uls, ult, dsdx, dtdy);
 }
 
 void filemenu_set_selected(MenuPanel* menu, s32 col, s32 row) {

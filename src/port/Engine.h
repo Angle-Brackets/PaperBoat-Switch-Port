@@ -164,6 +164,8 @@ int port_renderSettled(void);
 // Nonzero while textures queued by GameEngine_PrefetchTexture are still loading. Map loads and battle
 // starts hold the screen black on it, so the first frames don't wait on file reads. Capped in time.
 int port_texturePrefetchBusy(void);
+// Settings > Graphics > Smooth Menus and Text: interpolate menu windows, message boxes, text and cursors.
+int port_smoothMenus(void);
 
 #ifdef __cplusplus
 }

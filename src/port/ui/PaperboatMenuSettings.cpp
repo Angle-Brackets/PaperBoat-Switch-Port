@@ -431,6 +431,13 @@ void PaperboatMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("MatchRefreshRate"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Matches interpolation value to the refresh rate of your display."));
+    AddWidget(path, "Smooth Menus and Text", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("InterpolateMenus"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions()
+                     .Tooltip("Moves text, menu contents and cursors smoothly between game frames when the FPS is "
+                              "above 30. Turn off to keep the original 30 FPS motion of 2D elements.")
+                     .DefaultValue(true));
 #ifdef __SWITCH__
     // OpenGL is the only working backend here, so no Renderer API choice; benchmarks are under Switch.
 #else

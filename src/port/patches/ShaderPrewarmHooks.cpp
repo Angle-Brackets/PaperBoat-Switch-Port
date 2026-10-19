@@ -89,6 +89,8 @@ static void RegisterShaderPrewarmHooks_Init() {
         const int32_t slot = ((OnPostSaveFileLoad*) event)->saveSlot;
         if (slot >= 0 && slot < 4) {
             sSlotArea[slot] = AreaOf(gCurrentSaveFile.areaID, gCurrentSaveFile.mapID);
+            // Also for the next boot's title screen, so a slot that's loaded but never saved still hints.
+            Fast::ShaderPrewarm::Remember("slot" + std::to_string(slot), sSlotArea[slot]);
         }
     });
     // For the title screen, before file select has read anything: the area each slot was saved in.

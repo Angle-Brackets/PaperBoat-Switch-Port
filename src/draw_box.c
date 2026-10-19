@@ -2,6 +2,7 @@
 #include "nu/nusys.h"
 #include "assets/ui.h"
 #include "port/Engine.h"
+#include "port/interpolation/FrameInterpolation.h"
 #include "port/patches/Patches.h"
 
 #define INTEGER_LOG2(x) ((x) <= 1 ? 0 : (x) <= 2 ? 1 : (x) <= 4 ? 2 : (x) <= 8 ? 3 : (x) <= 16 ? 4 : (x) <= 32 ? 5 : (x) <= 64 ? 6 : (x) <= 128 ? 7 : (x) <= 256 ? 8 : (x) <= 512 ? 9 : 10)
@@ -14,8 +15,11 @@ typedef struct DefaultWindowStyle {
     /* 0x07 */ Color_RGBA8 color2;
 } DefaultWindowStyle; // size = 0x0B
 
-#define BOX_QUAD_BUFFER_NUM 21
-BSS Vtx gBoxQuadBuffer[BOX_QUAD_BUFFER_NUM][16];
+// [port] Per display context and larger (vanilla: one ring of 21). The renderer draws a frame (twice, with
+// interpolation) while the game builds the next, and a pause tab flip uses more than 21 rotating boxes, so a
+// shared ring was overwritten mid-draw and boxes were drawn with another box's vertices (full-screen flashes).
+#define BOX_QUAD_BUFFER_NUM 96
+BSS Vtx gBoxQuadBuffer[2][BOX_QUAD_BUFFER_NUM][16];
 
 DefaultWindowStyle gBoxDefaultStyles[] = {
     {
@@ -436,7 +440,7 @@ s32 draw_box(s32 flags, void* windowStyleArg, s32 posX, s32 posY, s32 posZ, s32 
         }
 
         if (flags & DRAW_FLAG_ROTSCALE) {
-            quads = gBoxQuadBuffer[gBoxQuadIndex++];
+            quads = gBoxQuadBuffer[gCurrentDisplayContextIndex][gBoxQuadIndex++];
             if (gBoxQuadIndex > BOX_QUAD_BUFFER_NUM - 1) {
                 gBoxQuadIndex = 0;
             }
@@ -468,6 +472,10 @@ s32 draw_box(s32 flags, void* windowStyleArg, s32 posX, s32 posY, s32 posZ, s32 
 
         if (quads != nullptr) {
             gSPViewport(gMainGfxPos++, &gBoxViewport);
+            // [port] Matrices pair with the previous frame's by order within a scope. Flat, the window's contents
+            // record theirs in the same scope, so on the first frame of a flip this projection could pair with
+            // an icon's matrix and stretch the box over the screen. A scope of its own pairs only rotations.
+            FrameInterpolation_RecordOpenChild("draw_box_rotscale", 0);
             guFrustumF(mtx1, -80.0f, 80.0f, 60.0f, -60.0f, 160.0f, 480.0f, 1.0f);
             guMtxF2L(mtx1, &gDisplayContext->matrixStack[gMatrixListPos]);
             sp154 = &gDisplayContext->matrixStack[gMatrixListPos];
@@ -496,6 +504,7 @@ s32 draw_box(s32 flags, void* windowStyleArg, s32 posX, s32 posY, s32 posZ, s32 
                 gSPSetGeometryMode(gMainGfxPos++, G_CULL_BACK);
             }
             guMtxF2L(mtx1, &gDisplayContext->matrixStack[gMatrixListPos]);
+            FrameInterpolation_RecordCloseChild();
             gSPMatrix(gMainGfxPos++, &gDisplayContext->matrixStack[gMatrixListPos++], G_MTX_PUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
             gDPSetTexturePersp(gMainGfxPos++, G_TP_PERSP);
             gSPPerspNormalize(gMainGfxPos++, 20);

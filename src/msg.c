@@ -576,6 +576,14 @@ void render_messages(void) {
     for (i = 0; i < ARRAY_COUNT(gMessagePrinters); i++) {
         if (gMessagePrinters[i].stateFlags & MSG_STATE_FLAG_2) {
             CALL_CANCELLABLE_CONTINUE_EVENT(MessagePreDraw, &gMessagePrinters[i]);
+            // [port] Per printer, so one box opening doesn't change another's matrix sequence (see windows.c).
+            const bool ownScope = port_smoothMenus();
+            if (ownScope) {
+                FrameInterpolation_RecordOpenChild("msg_printer", i);
+            }
+            gDPRectGroup(gMainGfxPos++, 0x4D534700 + i,
+                         gMessagePrinters[i].windowBasePos.x + gMessagePrinters[i].windowOffsetPos.x,
+                         gMessagePrinters[i].windowBasePos.y + gMessagePrinters[i].windowOffsetPos.y);
 
             draw_message_window(&gMessagePrinters[i]);
 
@@ -595,6 +603,10 @@ void render_messages(void) {
                 msg_draw_choice_pointer(&gMessagePrinters[i]);
             }
 
+            gDPRectGroupEnd(gMainGfxPos++);
+            if (ownScope) {
+                FrameInterpolation_RecordCloseChild();
+            }
             CALL_EVENT(MessagePostDraw, &gMessagePrinters[i]);
         }
     }
@@ -2014,7 +2026,10 @@ void draw_msg(intptr_t msgID, s32 posX, s32 posY, s32 opacity, s32 palette, u8 s
 
         msg_copy_to_print_buffer(printer, 10000, 1);
         FrameInterpolation_RecordOpenChild("draw_msg", 0);
+        // [port] The message's glyphs move as one between frames (see gDPRectGroup).
+        gDPRectGroupRigid(gMainGfxPos++, msgID, posX, posY);
         appendGfx_message(printer, (s16)posX, (s16)posY, 0, 0, flags, opacity & 0xFF);
+        gDPRectGroupEnd(gMainGfxPos++);
         FrameInterpolation_RecordCloseChild();
 
     }

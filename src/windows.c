@@ -1,5 +1,7 @@
 #include "common.h"
 #include "nu/nusys.h"
+#include "port/interpolation/FrameInterpolation.h"
+#include "port/Engine.h"
 
 enum SimpleWindowUpdateFlags {
     SIMPLE_WINDOW_UPDATE_1          = 0x1,
@@ -330,6 +332,14 @@ void render_windows(s32* windowsArray, s32 parent, s32 flags, s32 baseX, s32 bas
             boxFlags |= DRAW_FLAG_ANIMATED_BACKGROUND;
         }
 
+        // [port] One interpolation scope per window: in a shared one, a window appearing changes the matrix
+        // sequence and turns interpolation off for all of them, so open/close transitions played at 30 Hz.
+        const bool ownScope = port_smoothMenus();
+        if (ownScope) {
+            FrameInterpolation_RecordOpenChild("window", childWindowID);
+        }
+        // [port] The window's contents (text, icons, clip) move with it between frames (see gDPRectGroup).
+        gDPRectGroup(gMainGfxPos++, 0x57494E00 + childWindowID, posX, posY);
         if (draw_box(boxFlags, *(void**)&windowStyle, posX, posY, posZ, width, height, childOpacity, childDarkening,
                     scaleX, scaleY, rotX, rotY, rotZ, fpDrawContents, drawContentsArg0, rotScaleMtx,
                     boxTranslateX, boxTranslateY, outMtx) == 0) {
@@ -340,6 +350,10 @@ void render_windows(s32* windowsArray, s32 parent, s32 flags, s32 baseX, s32 bas
             if (childWindow->flags & WINDOW_FLAG_HAS_CHILDREN) {
                 render_windows(windowsArray, childWindowID, childFlags, posX, posY, childOpacity, childDarkening, outMtx);
             }
+        }
+        gDPRectGroupEnd(gMainGfxPos++);
+        if (ownScope) {
+            FrameInterpolation_RecordCloseChild();
         }
     }
 }

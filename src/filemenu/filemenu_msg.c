@@ -636,6 +636,8 @@ void filemenu_draw_message(u8* message, s32 x, s32 y, s32 alpha, s32 color, u32 
 
     if ((uintptr_t) message >= 0x100) {
         u8* tmp;
+        // [port] The string's glyphs move as one between frames (see gDPRectGroupRigid).
+        gDPRectGroupRigid(gMainGfxPos++, message, x, y);
         filemenu_draw_char(0xF3, x, y, flag1, color, flag2);
         tmp = message;
         while (*tmp != MSG_CHAR_READ_END) {
@@ -655,6 +657,7 @@ void filemenu_draw_message(u8* message, s32 x, s32 y, s32 alpha, s32 color, u32 
             tmp++;
 #endif
         }
+        gDPRectGroupEnd(gMainGfxPos++);
     }
 }
 
