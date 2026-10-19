@@ -31,16 +31,17 @@ jobs:
           TORCH_DEPLOY_KEY: ${{ secrets.TORCH_DEPLOY_KEY }}
         run: |
           git config --global --add safe.directory '*'
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          # In a container job $HOME isn't the home ssh looks in, so pass it every path.
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan github.com > "$HOME/.ssh/known_hosts"
           # A deploy key only opens its own repo, so each submodule is fetched with its key.
           fetch() {
             key="$1"; repo="$2"; path="$3"
             if [ -n "$key" ]; then
-              printf '%s\n' "$key" > ~/.ssh/$repo
-              chmod 600 ~/.ssh/$repo
+              printf '%s\n' "$key" > "$HOME/.ssh/$repo"
+              chmod 600 "$HOME/.ssh/$repo"
               git config --global url."git@github.com:Angle-Brackets/$repo".insteadOf "https://github.com/Angle-Brackets/$repo"
-              GIT_SSH_COMMAND="ssh -i ~/.ssh/$repo -o IdentitiesOnly=yes" git submodule update --init --recursive --depth 1 "$path"
+              GIT_SSH_COMMAND="ssh -i $HOME/.ssh/$repo -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" git submodule update --init --recursive --depth 1 "$path"
             else
               git submodule update --init --recursive --depth 1 "$path"
             fi
