@@ -7,6 +7,7 @@
 #include "port/Engine.h"
 #include "port/patches/Patches.h"
 #include "port/hooks/Events.h"
+#include "port/interpolation/FrameInterpolation.h"
 
 //TODO get a real ceil
 s32 my_ceil(f32 f) {
@@ -109,6 +110,10 @@ void msg_draw_char(MessagePrintState* printer, MessageDrawState* drawState, s32 
 void msg_draw_prim_rect(u8 r, u8 g, u8 b, u8 a, u16 posX, u16 posY, u16 sizeX, u16 sizeY);
 void msg_draw_speech_arrow(MessagePrintState* printer);
 void msg_draw_frame(s32 posX, s32 posY, s32 sizeX, s32 sizeY, s32 style, s32 palette, s32 fading, s32 bgAlpha, s32 frameAlpha);
+static void msg_draw_frame_scaled(s32 posX, s32 posY, s32 sizeX, s32 sizeY, f32 scale, s32 palette, s32 fading,
+                                  s32 bgAlpha, s32 frameAlpha, MessagePrintState* printer);
+// [port] Whether the choice box being drawn is opening (see msg_draw_frame_scaled).
+static bool sMsgChoiceOpening = false;
 void msg_draw_speech_bubble(MessagePrintState* printer, s16 posX, s16 posY, s16 straightWidth, s16 curveWidth,
                             s16 height, f32 scaleX, f32 scaleY, u8 opacity, s32 arg9);
 s32 msg_get_draw_char_width(s32 character, s32 charset, s32 variation, f32 msgScale, s32 overrideCharWidth, u16 flags);
@@ -563,6 +568,8 @@ void appendGfx_message(MessagePrintState* printer, s16 posX, s16 posY, u16 addit
                         msg_drawState->textStartPos[0] = 12;
                         msg_drawState->textStartPos[1] = 6;
                         frameAlpha = 255;
+                        // [port] Sampled before the opening branch below can switch the state to printing.
+                        sMsgChoiceOpening = printer->windowState == MSG_WINDOW_STATE_OPENING;
                         if (printer->windowState == MSG_WINDOW_STATE_OPENING) {
 
                             printer->fadeInCounter++;
@@ -611,8 +618,14 @@ void appendGfx_message(MessagePrintState* printer, s16 posX, s16 posY, u16 addit
                         msg_drawState->clipY[0] = frameY + 2;
                         msg_drawState->clipX[1] = frameX + frameSizeX - 2;
                         msg_drawState->clipY[1] = frameY + frameSizeY - 2;
-                        msg_draw_frame(frameX, frameY, frameSizeX, frameSizeY, MSG_STYLE_CHOICE, msg_drawState->framePalette, frameFading, frameAlpha,
-                                       frameAlpha);
+                        if (sMsgChoiceOpening) {
+                            msg_draw_frame_scaled(printer->windowBasePos.x, printer->windowBasePos.y, windowSizeX,
+                                                  windowSizeY, temp_f10, msg_drawState->framePalette, frameFading,
+                                                  frameAlpha, frameAlpha, printer);
+                        } else {
+                            msg_draw_frame(frameX, frameY, frameSizeX, frameSizeY, MSG_STYLE_CHOICE, msg_drawState->framePalette, frameFading, frameAlpha,
+                                           frameAlpha);
+                        }
                         msg_reset_gfx_state();
                         spAE = frameAlpha & 0xFF;
                         msg_drawState->textColor = MSG_PAL_STANDARD;
@@ -2032,6 +2045,64 @@ void msg_draw_speech_arrow(MessagePrintState* printer) {
     gSP2Triangles(gMainGfxPos++, 0, 2, 1, 0, 1, 2, 3, 0);
 }
 
+// [port] While the choice box opens, its frame is drawn at full size as vertex quads under a scale matrix
+// instead of screen rects. Frame interpolation can smooth a matrix but not rects, so the 6-tick grow plays at
+// the render rate instead of in 30 Hz steps.
+static bool sMsgFrameAsQuads = false;
+static Vtx sMsgFrameVtx[2][17 * 4]; // a background and 16 frame parts, alternating between frames
+static s32 sMsgFrameVtxCount = 0;
+
+// Coordinates in screen pixels; the message projection has y pointing up, hence the negation.
+static void msg_frame_quad(s32 ulx, s32 uly, s32 lrx, s32 lry, bool textured) {
+    Vtx* v = &sMsgFrameVtx[gCurrentDisplayContextIndex][sMsgFrameVtxCount];
+    s32 s = textured ? (lrx - ulx) << 5 : 0;
+    s32 t = textured ? (lry - uly) << 5 : 0;
+    s32 i;
+
+    if (sMsgFrameVtxCount + 4 > ARRAY_COUNT(sMsgFrameVtx[0])) {
+        return;
+    }
+    sMsgFrameVtxCount += 4;
+    for (i = 0; i < 4; i++) {
+        v[i].v.ob[0] = (i & 1) ? lrx : ulx;
+        v[i].v.ob[1] = -((i & 2) ? lry : uly);
+        v[i].v.ob[2] = 0;
+        v[i].v.flag = 0;
+        v[i].v.tc[0] = (i & 1) ? s : 0;
+        v[i].v.tc[1] = (i & 2) ? t : 0;
+        v[i].v.cn[0] = v[i].v.cn[1] = v[i].v.cn[2] = v[i].v.cn[3] = 255;
+    }
+    gSPVertex(gMainGfxPos++, v, 4, 0);
+    gSP2Triangles(gMainGfxPos++, 0, 2, 1, 0, 1, 2, 3, 0);
+}
+
+static void msg_draw_frame_scaled(s32 posX, s32 posY, s32 sizeX, s32 sizeY, f32 scale, s32 palette, s32 fading,
+                                  s32 bgAlpha, s32 frameAlpha, MessagePrintState* printer) {
+    Matrix4f toCenter, scaled, fromCenter, mtx;
+    f32 centerX = posX + sizeX * 0.5f;
+    f32 centerY = posY + sizeY * 0.5f;
+
+    FrameInterpolation_RecordOpenChild("msg_choice_open", (uintptr_t) printer);
+    guTranslateF(toCenter, -centerX, centerY, 0.0f);
+    guScaleF(scaled, scale, scale, 1.0f);
+    guTranslateF(fromCenter, centerX, -centerY, 0.0f);
+    guMtxCatF(toCenter, scaled, mtx);
+    guMtxCatF(mtx, fromCenter, mtx);
+    guMtxF2L(mtx, &gDisplayContext->matrixStack[gMatrixListPos]);
+    FrameInterpolation_RecordCloseChild();
+
+    gDPPipeSync(gMainGfxPos++);
+    gSPMatrix(gMainGfxPos++, VIRTUAL_TO_PHYSICAL(&gDisplayContext->matrixStack[gMatrixListPos++]),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPClearGeometryMode(gMainGfxPos++, G_CULL_BOTH | G_LIGHTING | G_ZBUFFER | G_FOG);
+    gSPTexture(gMainGfxPos++, -1, -1, 0, G_TX_RENDERTILE, G_ON);
+
+    sMsgFrameAsQuads = true;
+    sMsgFrameVtxCount = 0;
+    msg_draw_frame(posX, posY, sizeX, sizeY, MSG_STYLE_CHOICE, palette, fading, bgAlpha, frameAlpha);
+    sMsgFrameAsQuads = false;
+}
+
 void msg_draw_frame(s32 posX, s32 posY, s32 sizeX, s32 sizeY, s32 style, s32 palette, s32 fading, s32 bgAlpha, s32 frameAlpha) {
     s32 i;
     s32 frameType;
@@ -2080,7 +2151,11 @@ void msg_draw_frame(s32 posX, s32 posY, s32 sizeX, s32 sizeY, s32 style, s32 pal
                 gDPSetCombineMode(gMainGfxPos++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
                 gDPSetPrimColor(gMainGfxPos++, 0, 0, r, g, b, bgAlpha);
                 if (posX + sizeX - 8 > 0) {
-                    gDPScisFillRectangle(gMainGfxPos++, posX + 8, posY + 8, posX + sizeX - 8, posY + sizeY - 8);
+                    if (sMsgFrameAsQuads) {
+                        msg_frame_quad(posX + 8, posY + 8, posX + sizeX - 8, posY + sizeY - 8, false);
+                    } else {
+                        gDPScisFillRectangle(gMainGfxPos++, posX + 8, posY + 8, posX + sizeX - 8, posY + sizeY - 8);
+                    }
                 }
                 break;
             case MSG_STYLE_INSPECT:
@@ -2264,8 +2339,12 @@ void msg_draw_frame(s32 posX, s32 posY, s32 sizeX, s32 sizeY, s32 style, s32 pal
     for (i = 0; i < ARRAY_COUNT(textures); i++) {
         if (textures[i] != nullptr && quads[i].ulx < 10000) {
             gDPLoadTextureTile_4b(gMainGfxPos++, textures[i], G_IM_FMT_CI, 8, 8, 0, 0, 7, 7, palette, G_TX_WRAP, G_TX_WRAP, 3, 3, G_TX_NOLOD, G_TX_NOLOD);
-            gSPScisTextureRectangle(gMainGfxPos++, quads[i].ulx, quads[i].uly, quads[i].lrx, quads[i].lry,
-                                    G_TX_RENDERTILE, 0, 0, 0x400, 0x400);
+            if (sMsgFrameAsQuads) {
+                msg_frame_quad(quads[i].ulx / 4, quads[i].uly / 4, quads[i].lrx / 4, quads[i].lry / 4, true);
+            } else {
+                gSPScisTextureRectangle(gMainGfxPos++, quads[i].ulx, quads[i].uly, quads[i].lrx, quads[i].lry,
+                                        G_TX_RENDERTILE, 0, 0, 0x400, 0x400);
+            }
         }
     }
 

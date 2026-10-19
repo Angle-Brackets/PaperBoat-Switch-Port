@@ -1,7 +1,7 @@
 #include "common.h"
 #include "entity.h"
 #include "port/Engine.h"
-#include "port/Engine.h"
+#include "port/interpolation/FrameInterpolation.h"
 
 EntityModelScript D_8014C260 = {
     ems_End
@@ -365,7 +365,11 @@ void appendGfx_entity_model(EntityModel* model) {
         gDPPipeSync(gMainGfxPos++);
 
         if (model->fpSetupGfxCallback != nullptr) {
+            // [port] Render tasks run after the entity's interpolation scope closes; without one, matrices the
+            // callback builds (the save block's spinning star) update at the game's 30 Hz.
+            FrameInterpolation_RecordOpenChild("entity_setup_gfx", (uintptr_t) model);
             model->fpSetupGfxCallback(model->setupGfxCallbackArg0);
+            FrameInterpolation_RecordCloseChild();
         }
         gDPPipeSync(gMainGfxPos++);
 
