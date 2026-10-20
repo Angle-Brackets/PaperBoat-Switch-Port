@@ -1,5 +1,7 @@
 # PaperBoat — Switch Port
-*A Nintendo Switch port of [PaperBoat](https://github.com/HarbourMasters/PaperBoat), Harbour Masters' PC port of Paper Mario 64*
+**Play Paper Mario (N64) natively on your Nintendo Switch.** A homebrew port of
+[PaperBoat](https://github.com/HarbourMasters/PaperBoat), Harbour Masters' PC port of Paper Mario 64. No emulator:
+it runs the game's own code at 60 FPS, and builds its game files from your own ROM right on the console.
 
 Switch port by Soupa. PaperBoat itself is by the Harbour Masters team (Bass3l, JeodC, KiritoDv, Caladius).
 

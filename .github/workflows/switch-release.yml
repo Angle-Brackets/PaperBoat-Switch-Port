@@ -141,7 +141,7 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: PaperBoat for Switch ${{ github.ref_name }}
+          name: PaperBoat for Switch (Paper Mario 64) ${{ github.ref_name }}
           body_path: notes.md
           files: |
             PaperBoat-Switch.zip
