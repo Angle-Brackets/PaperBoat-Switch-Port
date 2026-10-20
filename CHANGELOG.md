@@ -3,7 +3,8 @@
 Releases of PaperBoat — Switch Port. Each version is tagged `switch-v<version>`.
 
 The first three numbers are the PaperBoat release the port is based on. A fourth number counts Switch port
-releases on that base: `switch-v1.0.3.1` is the first update after `switch-v1.0.3`.
+releases on that base: `switch-v1.0.3.1` is the first update after `switch-v1.0.3`. Release candidates
+(`switch-v1.0.3-rc1`) come before the release they're named for.
 
 For changes to PaperBoat itself, see the upstream [releases](https://github.com/HarbourMasters/PaperBoat/releases).
 
@@ -12,9 +13,9 @@ To release: add a section below headed with the tag (newest first), commit it, t
 The release workflow copies that section into the GitHub release notes.
 -->
 
-## switch-v1.0.3
+## switch-v1.0.3-rc1
 
-First release, based on PaperBoat 1.0.3.
+First release candidate, based on PaperBoat 1.0.3. Please [report any problems](https://github.com/Angle-Brackets/PaperBoat-Switch-Port/issues).
 
 ### Install and setup
 - Runs as Switch homebrew from the Homebrew Menu (custom firmware required).

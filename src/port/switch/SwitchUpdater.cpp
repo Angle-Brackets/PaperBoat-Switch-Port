@@ -86,7 +86,19 @@ std::vector<int> OwnVersion() {
     return { gBuildVersionMajor, gBuildVersionMinor, gBuildVersionPatch };
 }
 
-bool IsNewer(const std::vector<int>& a, const std::vector<int>& b) {
+// "switch-v1.0.3-rc1" and "-beta2" are pre-releases of 1.0.3.
+bool IsPreRelease(const std::string& tag) {
+    const size_t v = tag.find_first_of("0123456789");
+    return v != std::string::npos && tag.find('-', v) != std::string::npos;
+}
+
+bool OwnIsPreRelease() {
+    return IsPreRelease(SWITCH_RELEASE_TAG);
+}
+
+// Compares numbers first; with equal numbers a release is newer than its pre-releases, so an RC build
+// is offered the final release of the same version.
+bool IsNewer(const std::vector<int>& a, bool aPre, const std::vector<int>& b, bool bPre) {
     for (size_t i = 0; i < std::max(a.size(), b.size()); i++) {
         const int x = i < a.size() ? a[i] : 0;
         const int y = i < b.size() ? b[i] : 0;
@@ -94,7 +106,7 @@ bool IsNewer(const std::vector<int>& a, const std::vector<int>& b) {
             return x > y;
         }
     }
-    return false;
+    return bPre && !aPre;
 }
 
 void Fail(const std::string& what) {
@@ -143,7 +155,15 @@ void CheckThread(bool announce) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, AppendToString);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
     const CURLcode res = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl);
+    // releases/latest skips pre-releases, so it's 404 until a full release is published: nothing newer.
+    if (res == CURLE_HTTP_RETURNED_ERROR && status == 404) {
+        SPDLOG_INFO("[update] no full release published yet");
+        sState = SWITCH_UPDATE_CURRENT;
+        return;
+    }
     if (res != CURLE_OK) {
         return Fail(std::string("Couldn't reach GitHub: ") + curl_easy_strerror(res));
     }
@@ -164,7 +184,7 @@ void CheckThread(bool announce) {
         sLatestTag = tag;
         sDownloadUrl = url;
     }
-    const bool newer = IsNewer(VersionNumbers(tag), OwnVersion());
+    const bool newer = IsNewer(VersionNumbers(tag), IsPreRelease(tag), OwnVersion(), OwnIsPreRelease());
     SPDLOG_INFO("[update] latest release {} ({})", tag, newer ? "newer" : "not newer");
     if (newer && url.empty()) {
         return Fail("The latest release has no " + std::string(kAssetName) + ".");
