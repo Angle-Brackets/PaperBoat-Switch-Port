@@ -7,6 +7,8 @@ Switch port by Soupa. PaperBoat itself is by the Harbour Masters team (Bass3l, J
 
 **Latest version: switch-v1.0.3-rc1** (release candidate) · [What's new](CHANGELOG.md) · [Download](../../releases)
 
+[![Listed on PlayPorted](https://playported.com/badge.svg)](https://playported.com/ports/614-paper-mario/)
+
 > This is an unofficial port. Please don't ask Harbour Masters for help with the Switch version; open an
 > [issue here](../../issues) instead. We do not condone piracy: you need your own copy of the game.
 
